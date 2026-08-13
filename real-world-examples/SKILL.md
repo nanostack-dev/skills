@@ -9,13 +9,12 @@ An abstract claim ("shared storage for multiple metric shapes is normal") does n
 tell the reader what to picture. A concrete instance ("Prometheus stores counters
 and gauges as the same untyped float sample — the docs say so explicitly") does.
 The reader has to convert every unillustrated claim into a mental picture
-themselves; a good example does that conversion for them. This is not a formal
-industry rule the way ASD-STE100 is a rule for sentence structure — the closest
-things to a standard here are the **worked-example effect** from cognitive load
-research (Sweller: learners given worked examples outperform those given the same
-content abstractly) and the "show, don't just tell" guidance in the Google and
-Microsoft developer documentation style guides. Treat this skill as codifying that
-convention, not as citing a numbered spec.
+themselves; a good example does that conversion for them. There is no numbered
+industry spec for this, but there is precedent: the **worked-example effect** from
+cognitive load research (Sweller: learners given worked examples outperform those
+given the same content abstractly) and the "show, don't just tell" guidance in the
+Google and Microsoft developer documentation style guides. Treat this skill as
+codifying that convention, not as citing a formal standard.
 
 ## What to do
 
