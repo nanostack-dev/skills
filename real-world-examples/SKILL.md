@@ -68,3 +68,13 @@ If it is a fact or a single instruction, it usually does not.
 > happened to be filled in. Prometheus flattens type into one untyped float
 > store, but the type is still declared once, in the metric's HELP/TYPE
 > comment — never inferred from which fields are non-null on a given sample.
+
+**Weaker (claim only):**
+> Don't tell the reader something is easy — show them.
+
+**Stronger (claim + example):**
+> Don't tell the reader something is easy — show them. Microsoft's own style
+> guide dogfoods this: instead of describing a setup flow as "easy" or "fun,"
+> it has writers name the actual step — plug in the device, then follow the
+> wizard. The instruction proves the claim instead of asserting it.
+> ([Microsoft Writing Style Guide](https://learn.microsoft.com/en-us/style-guide/top-10-tips-style-voice))
