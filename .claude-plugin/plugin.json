@@ -1,0 +1,7 @@
+{
+  "name": "nanostack-skills",
+  "displayName": "Nanostack Skills",
+  "description": "Nanostack's own public skill library. Also fetched by raw GitHub URL from cloud workers that cannot reach a local plugin install.",
+  "version": "1.0.0",
+  "skills": ["./"]
+}

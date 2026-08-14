@@ -1,8 +1,12 @@
 # skills
 
-Public skill library, fetched by raw GitHub URL from Nanostack cloud workers
-(routines, remote agents) that cannot access the local `~/.claude/skills/`
-filesystem or attach plugins.
+Public skill library. Two ways to use it:
+
+- **Plugin marketplace** — add `https://github.com/nanostack-dev/skills` as a
+  marketplace in Claude Code, then install the `nanostack-skills` plugin.
+- **Raw GitHub URL** — for Nanostack cloud workers (routines, remote agents)
+  that cannot access the local `~/.claude/skills/` filesystem or attach
+  plugins.
 
 ## Usage
 

@@ -1,0 +1,13 @@
+{
+  "name": "nanostack-skills",
+  "owner": {
+    "name": "nanostack-dev"
+  },
+  "plugins": [
+    {
+      "name": "nanostack-skills",
+      "source": "./",
+      "description": "Nanostack's own public skill library."
+    }
+  ]
+}
