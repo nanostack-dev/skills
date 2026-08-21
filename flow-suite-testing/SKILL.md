@@ -1,6 +1,6 @@
 ---
 name: flow-suite-testing
-description: End-to-end API tests written as echopoint flows for anchor and echopoint — designing a flow as a branching graph rather than a chain, verifying side effects at the third party, running suites by tag on the ephemeral runner, the two organizations the flows live in, and keeping assertions in step with a status change. Use this whenever you author, edit, or debug a flow test, whenever you add a test that touches an external API, whenever you change an HTTP status or error code in anchor or echopoint, and whenever a post-deploy flow-suite job fails. A flow written as a straight line is the most common defect in this suite, so read the graph section before adding any node.
+description: End-to-end API tests written as echopoint flows for anchor and echopoint — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, verifying side effects at the third party, running suites by tag on the ephemeral runner, and keeping assertions in step with a status change. Use this whenever you author, edit, or debug a flow test, whenever you add a test that touches an external API or needs a URL, account, or key, whenever you change an HTTP status or error code in anchor or echopoint, and whenever a post-deploy flow-suite job fails. A flow written as a straight line, and a literal that should have been a variable, are the two most common defects in this suite.
 ---
 
 # Flow suite testing
@@ -38,6 +38,50 @@ you want the answer, including before you push.
 
 CI runs the same command through the `nanostack-dev/echopoint-cli@v1` action. `infra`'s
 `anchor-test.yml` is an on-demand workflow taking a tag, so a suite can run from CI without a deploy.
+
+## The authoring loop
+
+Work this loop for any new or changed flow. Steps 1 and 4 are the ones people skip, and both are
+cheap.
+
+**1. Survey what already exists.** Before writing a single node:
+
+```
+echopoint flows list --profile prod            # is there already a flow for this feature?
+echopoint org env get --profile prod           # which environments and variables exist
+echopoint flows env get <flow-id> --profile prod
+echopoint collections list --profile prod      # third-party specs already imported
+```
+
+You are looking for a flow to extend rather than duplicate, variable names to reuse rather than
+invent, and a collection that already describes the third party. See **Variables** below — this
+step is what stops literals from being baked in.
+
+**2. Design the graph before building it.** Decide the setup chain, the branches, and the fan-in.
+Write it down, even as three lines of text. It is far cheaper to move an edge on paper than after
+twelve nodes exist. See **Design the flow as a graph**.
+
+**3. Build the nodes.** Logical ids, `--after` pointed at the fan-out node, an assertion and a
+display name that agree with each other.
+
+**4. Validate statically.** `echopoint flows validate <id>` catches dangling edges, unreachable
+`{{node.x}}` references, and cycles without touching an environment. Run it before the first real
+run — it turns a slow failed run into an instant message.
+
+**5. Run it.** `echopoint flows run <id> --environment dev --verbose --profile prod`. `--verbose`
+shows the nodes' start order, which is how you confirm the fan-out is actually running concurrently
+rather than in the order you happened to add them.
+
+**6. Read the failures and go back to step 3.** The node line, not the flow line. A long `Skipped`
+list means the shape is wrong, not the node — fix the shape first.
+
+**7. Run it twice in a row.** A flow that passes once and fails the second time did not clean up
+after itself, and it will fail for the next person instead. This is the check that catches a fixed
+literal where a `{{$...}}` value belonged.
+
+**8. Tag it, mirror it, run both.** `echopoint flows tag` with the service name, apply the same
+change in the other organization, and run the tag against both profiles. A flow is not done until
+both orgs are green.
 
 ## Design the flow as a graph, not a line
 
@@ -123,6 +167,45 @@ Prefer one flow that covers a whole feature through many branches over many smal
 flows. A feature flow pays for its setup once, reports every case in a single run, and cleans up in
 one place. Split only when a case needs a genuinely different setup.
 
+## Variables: look before you hardcode
+
+A `{{name}}` that is not a node output is a **variable**, and the runner resolves it from three
+places. Knowing which one to use is most of the skill here.
+
+| Scope | Command | Use it for |
+|---|---|---|
+| Organization environment | `echopoint org env get` / `set` | anything every flow in the org shares — base URLs, the CI credential, a standing test account |
+| Flow environment | `echopoint flows env get/set <flow-id>` | a value only this flow needs, or one that must differ from the org default |
+| Flow input | none — it is inferred | any `{{name}}` still unresolved at launch |
+
+Both environments carry **named overlays**, which is what `--environment dev` selects, plus an
+unnamed base. A flow-level value wins over the organization's for the same name. Anything left
+unresolved becomes a required input, and the launch fails with `unknown initial variable` rather
+than sending a request with an empty string — which is why an unresolved reference is loud rather
+than silent.
+
+**Survey before you invent.** The organization already defines, in its `dev` overlay:
+`nanostackBaseUrl`, `echopointUrl`, `echopointApiKey`, `email`, `password`, `githubUrl`. A new
+anchor flow writes `{{nanostackBaseUrl}}`, never `https://apidev.echopoint.dev` — not because
+literals fail today, but because the literal is invisible on the day the host changes, and it makes
+the flow unrunnable against any other environment. Run `org env get` first and reuse what is there.
+
+**Reuse silently, create with permission.** If the value you need already has a name, use it — no
+need to ask, and asking about `{{nanostackBaseUrl}}` is noise. If you are about to bake in a literal
+that clearly *should* be a variable — a host, an account, a key, anything environment-shaped — say
+so and offer to add it, naming the scope you would put it in and why. Organization variables are
+shared state that outlive your flow and affect everyone else's, so creating one is the user's call,
+not a side effect of writing a test.
+
+**A value that varies per run is not a variable — it is a generator.** `{{$email}}`, `{{$slug:3}}`,
+`{{$int:1:100}}`, `{{$uuid}}` come from the runner's own namespace and differ every execution. Reach
+for these for anything a test creates. A fixed name in a create request is the leading cause of a
+flow that passes once and collides forever after.
+
+**Treat `org env get` output as secret material.** It prints values in cleartext, API keys included.
+Never paste it into a pull request, an issue, a commit, or a chat message — read the key *names* and
+quote those.
+
 ## One assertion, one cause
 
 An assertion that can pass for two different reasons tests neither. Both known cases in this suite
@@ -168,8 +251,8 @@ a shared resource to the organization, so it is the user's call.
 
 Three things to keep in mind:
 
-- **Credentials belong in the environment**, never in a node body. Overlay them with
-  `--environment` and reference them as flow inputs, the same as `{{nanostackBaseUrl}}`.
+- **Credentials belong in an environment**, never in a node body — see **Variables** above. A
+  vendor key is organization-scoped if several flows call that vendor, flow-scoped if only one does.
 - **Confirm the effect; do not test the vendor.** One read-back assertion on the fields we wrote is
   the goal. Exercising the third party's own behaviour makes the suite slow and flaky for no return.
 - **Some effects are not readable, and that is a legitimate skip.** Delivery of an actual email is
