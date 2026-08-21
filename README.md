@@ -22,3 +22,8 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
 
 - [`real-world-examples`](real-world-examples/SKILL.md) — ground explanations,
   comparisons, and recommendations in concrete real-world examples.
+- [`flow-suite-testing`](flow-suite-testing/SKILL.md) — end-to-end API testing
+  with echopoint flows: the authoring loop, designing a flow as a branching graph
+  rather than a chain, reusing organization and flow variables instead of
+  hardcoding, verifying side effects at the third party, and keeping assertions
+  in step with a status change.
