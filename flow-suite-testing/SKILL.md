@@ -195,9 +195,9 @@ creating one is the user's call, not a side effect of writing a test.
 for these for anything a test creates. A fixed name in a create request is the leading cause of a
 flow that passes once and collides forever after.
 
-**Environment values can be secrets.** Read variable *names* when you are surveying, and only reveal
-values deliberately. Never paste an environment dump into a pull request, an issue, a commit, or a
-chat message.
+**Environment values can be secrets.** `env get` shows names only; `--show-values` reveals them, and
+is worth typing out deliberately rather than by habit. Surveying never needs it. Whatever you do
+reveal, do not paste it into a pull request, an issue, a commit, or a chat message.
 
 ## One assertion, one cause
 
