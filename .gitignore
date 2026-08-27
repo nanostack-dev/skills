@@ -1,1 +1,4 @@
 .DS_Store
+
+# Agent worktrees, created by git worktree add
+worktrees/
