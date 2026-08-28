@@ -1,6 +1,6 @@
 ---
 name: flow-suite-testing
-description: End-to-end API testing with echopoint flows — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, verifying side effects at the third party, and running suites by tag on the ephemeral runner. Use this whenever you author, edit, or debug an echopoint flow that tests an API, whenever you add a test touching an external service or needing a URL, account, or key, whenever you change an HTTP status or error code in an API that flows assert on, and whenever a flow suite fails in CI. A flow written as a straight line, and a literal that should have been a variable, are the two most common defects in these suites.
+description: End-to-end API testing with echopoint flows — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, storing anything that authenticates as a secret, verifying side effects at the third party, and running suites by tag on the ephemeral runner. Use this whenever you author, edit, or debug an echopoint flow that tests an API, whenever you add a test touching an external service or needing a URL, account, or key, whenever a flow carries an API key, token, password or signing secret, whenever you change an HTTP status or error code in an API that flows assert on, and whenever a flow suite fails in CI. A flow written as a straight line, a literal that should have been a variable, and a credential stored in plain text are the three most common defects in these suites.
 ---
 
 # Flow suite testing
@@ -169,14 +169,18 @@ places. Knowing which one to use is most of the skill here.
 
 | Scope | Command | Use it for |
 |---|---|---|
-| Organization environment | `echopoint org env get` / `set` | anything every flow in the organization shares — base URLs, a CI credential, a standing test account |
-| Flow environment | `echopoint flows env get/set <flow-id>` | a value only this flow needs, or one that must differ from the organization default |
+| Organization variables | `echopoint org env get` / `set` | anything every flow in the organization shares — base URLs, a CI credential, a standing test account |
+| Flow variables | `echopoint flows env get/set <flow-id>` | a value only this flow needs, or one that must differ from the organization default |
 | Flow input | none — it is inferred | any `{{name}}` still unresolved at launch |
 
-Both environments carry **named overlays**, which is what `--environment` selects, plus an unnamed
-base. A flow-level value wins over the organization's for the same name. Anything left unresolved
+An **environment** is a named overlay such as `dev` or `prd`, and nothing else — it is what
+`--environment` selects. The container holding the base variables and its overlays is a **variable
+set**. A flow-level value wins over the organization's for the same name. Anything left unresolved
 becomes a required input and the launch fails with `unknown initial variable`, rather than sending a
 request with an empty string — an unresolved reference is loud, not silent.
+
+An environment has to exist before you can write into it: `echopoint org env environments create
+<name>`. A misspelled `-e` fails with a 404 rather than quietly creating an overlay nothing reads.
 
 **Survey before you invent.** If the organization already defines a base URL, a test account, or an
 API key, use that name. Writing `https://api.example.com` into a node is not wrong today; it is
@@ -195,9 +199,34 @@ creating one is the user's call, not a side effect of writing a test.
 for these for anything a test creates. A fixed name in a create request is the leading cause of a
 flow that passes once and collides forever after.
 
-**Environment values can be secrets.** `env get` shows names only; `--show-values` reveals them, and
-is worth typing out deliberately rather than by habit. Surveying never needs it. Whatever you do
-reveal, do not paste it into a pull request, an issue, a commit, or a chat message.
+## Anything that authenticates is a secret
+
+A variable can be stored as a secret, and anything that authenticates **must** be:
+
+```
+echopoint org env set --secret --var API_KEY=sk-live-...
+echopoint flows env set <flow-id> --secret --var SIGNING_KEY=...
+```
+
+API keys, bearer tokens, passwords, signing keys, session cookies, client secrets, database URLs
+with a password in them, webhook signing secrets. If it would let someone act as you, it is a
+secret. A base URL is not; an account email on its own is not.
+
+A secret is encrypted at rest, a read never returns its value, and the runner replaces it with
+`***` in node results, progress events, and flow exports. That last part is the reason this matters
+for flows specifically: a request node reports the URL, headers and body it actually sent, so a
+token interpolated into an `Authorization` header lands in the stored execution result. Stored as a
+secret it is masked there. Stored plain it is not, and every execution keeps a copy.
+
+**Set it as a secret the first time.** Plain to secret is allowed and the reverse is refused — the
+service returns `SECRET_VARIABLE_CANNOT_BECOME_PLAIN` — so a value that goes in plain has already
+been written to every execution result that used it. Turning it into a secret afterwards protects
+future runs, not past ones. Rotate the credential as well as flipping the flag.
+
+`env get` shows names only; `--show-values` reveals plain values and prints `<secret>` for a secret,
+because a read cannot return one. Type `--show-values` deliberately rather than by habit; surveying
+never needs it. Whatever you do reveal, do not paste it into a pull request, an issue, a commit, or
+a chat message.
 
 ## One assertion, one cause
 
