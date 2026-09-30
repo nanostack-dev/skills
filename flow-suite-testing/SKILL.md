@@ -1,6 +1,6 @@
 ---
 name: flow-suite-testing
-description: End-to-end API testing with echopoint flows — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, storing anything that authenticates as a secret, verifying side effects at the third party, and running suites by tag on the ephemeral runner. Use this whenever you author, edit, or debug an echopoint flow that tests an API, whenever you add a test touching an external service or needing a URL, account, or key, whenever a flow carries an API key, token, password or signing secret, whenever you change an HTTP status or error code in an API that flows assert on, and whenever a flow suite fails in CI. A flow written as a straight line, a literal that should have been a variable, and a credential stored in plain text are the three most common defects in these suites.
+description: End-to-end API testing with echopoint flows — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, storing anything that authenticates as a secret, verifying side effects at the third party, checking every event a feature emits with one final webhook wait, and running suites by tag on the ephemeral runner. Use this whenever you author, edit, or debug an echopoint flow that tests an API, whenever you add a test touching an external service or needing a URL, account, or key, whenever a flow carries an API key, token, password or signing secret, whenever a feature under test emits webhooks or events, whenever you change an HTTP status or error code in an API that flows assert on, and whenever a flow suite fails in CI. A flow written as a straight line, a literal that should have been a variable, and a credential stored in plain text are the three most common defects in these suites.
 ---
 
 # Flow suite testing
@@ -279,6 +279,64 @@ Three things to keep in mind:
   the standing example — confirming it needs a live relay and a mailbox. Prefer asserting the record
   you control (the send record, the webhook event row) and say plainly in the flow what is not
   covered.
+
+## Check the events a feature emits with one final webhook wait
+
+When the API under test emits events (webhooks, Standard Webhooks, an outbox), point its event
+endpoint at `{{webhook.url}}` during setup. Launch gives every run its own webhook, so the run only
+sees its own events. Then check them all in **one webhook wait at the end of the flow**, not one
+wait per event.
+
+```
+   setup ──► create A ──► update A ──► accept A ─┐
+   (event    ├─► create B ──► resend B ──────────┼──► events (webhook wait, run_when always) ──► cleanup
+   endpoint  └─► create C ──► delete C ──────────┘
+   = {{webhook.url}})
+```
+
+The wait holds **expected events**: each is a name over a group of checks, and all of a group's
+checks must pass on one event.
+
+```
+echopoint flows node add <flow> --id events --type webhook_wait --name "Every invitation event" \
+  --timeout 30000 --settle 3000 --run-when always --after accept-a --after resend-b --after delete-c
+
+echopoint flows node expect add <flow> events --name "Resent with a new token" \
+  --match '$.type equals organization.invitation.updated' \
+  --match '$.data.invitation_id equals {{create-b.id}}'
+
+echopoint flows node expect add <flow> events --name "Accepted once" --once \
+  --match '$.type equals organization.invitation.accepted' \
+  --match '$.data.invitation_id equals {{create-a.id}}'
+
+echopoint flows node expect add <flow> events --name "No accept after delete" --never \
+  --match '$.type equals organization.invitation.accepted' \
+  --match '$.data.invitation_id equals {{create-c.id}}'
+
+echopoint flows node assertion add <flow> events --extractor header --header-name webhook-signature \
+  --operator startsWith --value "v1,"
+```
+
+Rules that make this a real test:
+
+- **Tie every expected event to its resource with a template** (`{{create-b.id}}`). A check on
+  `$.type` alone passes on any event of that type. It cannot tell an update of A from a resend of
+  B, which is exactly the bug a missing resend event hides behind.
+- **One event counts for one expected event.** Two expected events with the same checks need two
+  events. Events go to expected events oldest first, in the order they were added, so add the
+  specific ones before the broad ones.
+- **Prove what must not happen** with `--never` or `--once`, and give the wait a `--settle` window
+  (a few seconds) so a late extra event is still seen.
+- **The node's own assertions run on every claimed event**: the signature header, and that no
+  secret leaks (`--extractor body --operator notContains --value <token prefix>`).
+- **`--run-when always`**, with an edge from every trigger branch. A branch that failed then
+  leaves only its own expected events `not evaluated`; the rest are still judged.
+- Read a failure from the node result: each expected event has a verdict, and one that found
+  nothing names the **closest** request with each check's expected and actual value.
+
+A webhook wait without expected events waits for the first request that passes its assertions.
+Keep that for a flow that must pause on one callback before its next step, not for checking
+events.
 
 ## Organizations
 
