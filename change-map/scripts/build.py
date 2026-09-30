@@ -162,6 +162,14 @@ def check(data):
         dupes = {t for t in examples if examples.count(t) > 1}
         if dupes:
             problems.append(f"{len(dupes)} tests appear in more than one row, e.g. {sorted(dupes)[0]}")
+    points = (data.get("decisions") or []) + (data.get("watch") or [])
+    bare = [pt.get("id") or pt.get("title") for pt in points if not pt.get("example")]
+    if bare:
+        problems.append(f"{len(bare)} of {len(points)} review points have no example (request, response, row, event), e.g. {bare[0]!r}")
+    for pt in points:
+        for ex in pt.get("example") or []:
+            if not ex.get("code") or len(ex["code"].splitlines()) > 24:
+                problems.append(f"example {ex.get('label')!r} on {pt.get('id')!r} is empty or over 24 lines")
     for t in (data.get("schema") or {}).get("tables") or []:
         blank = [c[0] for c in t.get("cols") or [] if not c[3]]
         if blank:

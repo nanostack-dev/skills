@@ -1,77 +1,304 @@
 {
- "meta": {"stack": "1/3", "links": [{"label": "Issue #139", "url": "https://github.com/org/repo/issues/139"}]},
+ "meta": {
+  "stack": "1/3",
+  "links": [
+   {
+    "label": "Issue #139",
+    "url": "https://github.com/org/repo/issues/139"
+   }
+  ]
+ },
  "summary": "Organizations can now invite people. A Product invites an email with a role, gets a one-time token, and later accepts it for a signed-in user.",
  "verdict": {
-  "risk": "medium", "door": "two-way",
+  "risk": "medium",
+  "door": "two-way",
   "ask": "Status is computed rather than stored, a row lock keeps one pending invitation per email, and the token alone is enough to join.",
   "doorNote": "Additive only. The down migration drops the table."
  },
  "system": {
-  "cols": ["Product side", "API", "Services", "Storage and events"],
+  "cols": [
+   "Product side",
+   "API",
+   "Services",
+   "Storage and events"
+  ],
   "nodes": [
-   {"id": "product", "label": "Product backend", "sub": "any Product", "kind": "service", "col": 0, "row": 0},
-   {"id": "api", "label": "8 invitation routes", "sub": "token only in bodies", "kind": "api", "col": 1, "row": 0, "status": "new"},
-   {"id": "table", "label": "organization_invitations", "sub": "hash only", "kind": "db", "col": 3, "row": 0, "status": "new"}
+   {
+    "id": "product",
+    "label": "Product backend",
+    "sub": "any Product",
+    "kind": "service",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "api",
+    "label": "8 invitation routes",
+    "sub": "token only in bodies",
+    "kind": "api",
+    "col": 1,
+    "row": 0,
+    "status": "new"
+   },
+   {
+    "id": "table",
+    "label": "organization_invitations",
+    "sub": "hash only",
+    "kind": "db",
+    "col": 3,
+    "row": 0,
+    "status": "new"
+   }
   ],
   "edges": [
-   {"from": "product", "to": "api", "label": "create · accept", "status": "new"},
-   {"from": "api", "to": "table", "label": "insert", "status": "new"}
+   {
+    "from": "product",
+    "to": "api",
+    "label": "create · accept",
+    "status": "new"
+   },
+   {
+    "from": "api",
+    "to": "table",
+    "label": "insert",
+    "status": "new"
+   }
   ]
  },
  "decisions": [
-  {"id": "org-lock", "tag": "concurrency", "title": "A row lock keeps one pending invitation per email",
+  {
+   "id": "org-lock",
+   "tag": "concurrency",
+   "title": "A row lock keeps one pending invitation per email",
    "why": "Two concurrent creates queue on the lock, so only one passes the check.",
    "choice": "Every write takes `SELECT … FOR NO KEY UPDATE` on the organization first.",
    "instead": "A partial unique index, or SERIALIZABLE with retries.",
    "cost": "Invitation writes in one organization run one at a time.",
-   "refs": ["path/to/service.go:100"], "see": "race"}
+   "refs": [
+    "path/to/service.go:100"
+   ],
+   "see": "race",
+   "example": [
+    {
+     "label": "Two creates at the same instant",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"bob@acme.io\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{ \"errors\": [{ \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\" }] }"
+    },
+    {
+     "label": "First statement of every write",
+     "lang": "sql",
+     "code": "SELECT * FROM organizations\nWHERE id = 'org_acme' FOR NO KEY UPDATE;  -- request B waits here"
+    }
+   ]
+  }
  ],
  "watch": [
-  {"id": "delete-any", "sev": "question", "title": "Delete works on accepted invitations",
-   "body": "No status check before delete. Intended?", "ref": "path/to/service.go:205"}
+  {
+   "id": "delete-any",
+   "sev": "question",
+   "title": "Delete works on accepted invitations",
+   "body": "No status check before delete. Intended?",
+   "ref": "path/to/service.go:205",
+   "example": [
+    {
+     "label": "Deleting an accepted invitation",
+     "lang": "http",
+     "code": "DELETE /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n\n204\nevent → organization.invitation.deleted"
+    }
+   ]
+  }
  ],
  "scenarios": [
-  {"id": "race", "title": "Two admins invite Bob at once", "caption": "Why the lock exists.",
+  {
+   "id": "race",
+   "title": "Two admins invite Bob at once",
+   "caption": "Why the lock exists.",
    "actors": [
-    {"id": "ra", "label": "Request A", "sub": "transaction", "kind": "service"},
-    {"id": "db", "label": "Postgres", "sub": "Acme row", "kind": "db"},
-    {"id": "rb", "label": "Request B", "sub": "transaction", "kind": "service"}
+    {
+     "id": "ra",
+     "label": "Request A",
+     "sub": "transaction",
+     "kind": "service"
+    },
+    {
+     "id": "db",
+     "label": "Postgres",
+     "sub": "Acme row",
+     "kind": "db"
+    },
+    {
+     "id": "rb",
+     "label": "Request B",
+     "sub": "transaction",
+     "kind": "service"
+    }
    ],
-   "board": {"title": "State in Postgres", "cols": ["what", "value"], "rows": [["lock", "free"]]},
+   "board": {
+    "title": "State in Postgres",
+    "cols": [
+     "what",
+     "value"
+    ],
+    "rows": [
+     [
+      "lock",
+      "free"
+     ]
+    ]
+   },
    "steps": [
-    {"from": "ra", "to": "db", "k": "call", "label": "lock Acme row", "say": "A takes the lock.", "board": [["lock", "held by A"]]},
-    {"from": "rb", "to": "db", "k": "block", "until": 3, "label": "lock Acme row", "say": "B **waits**."},
-    {"from": "ra", "to": "db", "k": "call", "label": "insert, commit", "say": "A commits and releases.", "board": [["lock", "free"]]},
-    {"from": "rb", "to": "db", "k": "error", "label": "409 ALREADY_PENDING", "say": "B sees A's row and is refused."}
-   ]}
+    {
+     "from": "ra",
+     "to": "db",
+     "k": "call",
+     "label": "lock Acme row",
+     "say": "A takes the lock.",
+     "board": [
+      [
+       "lock",
+       "held by A"
+      ]
+     ]
+    },
+    {
+     "from": "rb",
+     "to": "db",
+     "k": "block",
+     "until": 3,
+     "label": "lock Acme row",
+     "say": "B **waits**."
+    },
+    {
+     "from": "ra",
+     "to": "db",
+     "k": "call",
+     "label": "insert, commit",
+     "say": "A commits and releases.",
+     "board": [
+      [
+       "lock",
+       "free"
+      ]
+     ]
+    },
+    {
+     "from": "rb",
+     "to": "db",
+     "k": "error",
+     "label": "409 ALREADY_PENDING",
+     "say": "B sees A's row and is refused."
+    }
+   ]
+  }
  ],
  "model": {
-  "entity": "Invitation", "hint": "Only accepted is written.",
+  "entity": "Invitation",
+  "hint": "Only accepted is written.",
   "states": [
-   {"id": "pending", "label": "pending", "note": "accepted_at null", "tone": "accent"},
-   {"id": "accepted", "label": "accepted", "note": "accepted_at set", "tone": "good"},
-   {"id": "expired", "label": "expired", "note": "expires_at ≤ now", "tone": "muted", "derived": true}
+   {
+    "id": "pending",
+    "label": "pending",
+    "note": "accepted_at null",
+    "tone": "accent"
+   },
+   {
+    "id": "accepted",
+    "label": "accepted",
+    "note": "accepted_at set",
+    "tone": "good"
+   },
+   {
+    "id": "expired",
+    "label": "expired",
+    "note": "expires_at ≤ now",
+    "tone": "muted",
+    "derived": true
+   }
   ],
-  "transitions": [["pending", "accepted", "accept"], ["pending", "expired", "clock passes"]],
-  "ops": {"cols": ["pending", "accepted", "expired"], "rows": [["accept", "ok", "409", "409"]], "edges": ["0"]}
+  "transitions": [
+   [
+    "pending",
+    "accepted",
+    "accept"
+   ],
+   [
+    "pending",
+    "expired",
+    "clock passes"
+   ]
+  ],
+  "ops": {
+   "cols": [
+    "pending",
+    "accepted",
+    "expired"
+   ],
+   "rows": [
+    [
+     "accept",
+     "ok",
+     "409",
+     "409"
+    ]
+   ],
+   "edges": [
+    "0"
+   ]
+  }
  },
  "schema": {
   "hint": "One new table.",
-  "tables": {"organization_invitations": {
-   "note": "An offer to join one organization.",
-   "notes": ["No status column."],
-   "cols": {"id": "KSUID `oinv_…`", "token_hash": "SHA-256 of the token"},
-   "idx": {"_organization_email": "The one-pending-per-email check"}
-  }},
-  "refs": {"organizations": "Row locked by every write"}
+  "tables": {
+   "organization_invitations": {
+    "note": "An offer to join one organization.",
+    "notes": [
+     "No status column."
+    ],
+    "cols": {
+     "id": "KSUID `oinv_…`",
+     "token_hash": "SHA-256 of the token"
+    },
+    "idx": {
+     "_organization_email": "The one-pending-per-email check"
+    }
+   }
+  },
+  "refs": {
+   "organizations": "Row locked by every write"
+  }
  },
  "flows": [
-  {"name": "Accept", "actor": "Product · `:update`", "tx": [1, 2], "steps": [
-   {"k": "read", "t": "Find by token hash", "err": "400 TOKEN_NOT_FOUND"},
-   {"k": "lock", "t": "Lock the organization row"},
-   {"k": "write", "t": "Add member, set `accepted_at`"}
-  ], "result": "All or nothing."}
+  {
+   "name": "Accept",
+   "actor": "Product · `:update`",
+   "tx": [
+    1,
+    2
+   ],
+   "steps": [
+    {
+     "k": "read",
+     "t": "Find by token hash",
+     "err": "400 TOKEN_NOT_FOUND"
+    },
+    {
+     "k": "lock",
+     "t": "Lock the organization row"
+    },
+    {
+     "k": "write",
+     "t": "Add member, set `accepted_at`"
+    }
+   ],
+   "result": "All or nothing."
+  }
  ],
- "api": {"POST /v1/products/{product_id}/invitations/accept": {"scope": ":update", "emits": "accepted", "note": "Token in the body"}},
+ "api": {
+  "POST /v1/products/{product_id}/invitations/accept": {
+   "scope": ":update",
+   "emits": "accepted",
+   "note": "Token in the body"
+  }
+ },
  "apiHint": "Scopes drop the `organization_invitation` prefix."
 }
