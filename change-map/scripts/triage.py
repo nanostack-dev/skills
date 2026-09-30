@@ -6,8 +6,10 @@
 
 change.json gets meta, buckets and tests. review.diff keeps only the files a
 human has to read (schema, contract, logic, wiring, docs), so the agent reads
-that instead of the whole diff. tests.diff holds the test files for the
-Given/When/Then pass. A summary of where the lines are goes to stderr.
+that instead of the whole diff. review.index gives path:line for every symbol
+the change adds or touches, so refs need no counting. tests.diff holds the test
+files for the Given/When/Then subagent. schema (from CREATE TABLE) and api
+(from OpenAPI paths) are prefilled. A reading plan goes to stderr.
 """
 
 import argparse
@@ -16,6 +18,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 
 BUCKETS = [
     ("generated", "Generated", True),
@@ -50,8 +53,14 @@ TEST_NAME = [
 ]
 
 
-def run(cmd):
-    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+def run(cmd, tries=3):
+    for attempt in range(tries):
+        try:
+            return subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=90).stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if attempt == tries - 1:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
 def match(path, patterns):
@@ -75,11 +84,22 @@ def parse_diff(text):
             continue
         header = chunk.split("\n", 1)[0]
         path = header.split(" b/", 1)[-1].strip()
-        added, removed, head, tests = 0, 0, [], []
+        added, removed, head, tests, lines, hunks, n = 0, 0, [], [], [], [], 0
         for line in chunk.split("\n"):
             if line.startswith("+++") or line.startswith("---"):
                 continue
+            hunk = HUNK.match(line)
+            if hunk:
+                n = int(hunk.group(1))
+                if hunk.group(2).strip():
+                    hunks.append((n, hunk.group(2).strip()))
+                continue
+            if line.startswith(" "):
+                lines.append((n, " ", line[1:]))
+                n += 1
             if line.startswith("+"):
+                lines.append((n, "+", line[1:]))
+                n += 1
                 added += 1
                 if len(head) < 8:
                     head.append(line[1:])
@@ -89,11 +109,155 @@ def parse_diff(text):
                         tests.append(found.group(1))
             elif line.startswith("-"):
                 removed += 1
-        files.append({"path": path, "add": added, "del": removed, "head": head, "tests": tests, "chunk": chunk})
+        files.append({"path": path, "add": added, "del": removed, "head": head, "tests": tests, "chunk": chunk,
+                      "lines": lines, "hunks": hunks})
     return files
 
 
-def pr_meta(pr, repo):
+HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$")
+SYMBOL = [
+    re.compile(r"^func (?:\([^)]*\) )?(\w+)"),
+    re.compile(r"^type (\w+) "),
+    re.compile(r"^export (?:default )?(?:async )?(?:function|class|const|interface|type|enum) (\w+)"),
+    re.compile(r"^(?:async )?(?:function|class) (\w+)"),
+    re.compile(r"^(?:async )?def (\w+)|^class (\w+)"),
+    re.compile(r"^(?:pub )?(?:async )?fn (\w+)|^(?:pub )?(?:struct|enum|trait) (\w+)"),
+    re.compile(r"(?i)^\s*create (?:unique )?(?:table|index|trigger|view|function|type)(?: if not exists)? (\w+)"),
+    re.compile(r"(?i)^\s*alter table (\w+)"),
+    re.compile(r"^\s{2}(/[^:\s]+):\s*$"),
+]
+
+
+def symbols(f):
+    out, seen = [], set()
+    for n, kind, text in f["lines"]:
+        for rx in SYMBOL:
+            m = rx.match(text)
+            if m:
+                name = next(g for g in m.groups() if g)
+                if (name, n) not in seen:
+                    seen.add((name, n))
+                    out.append((n, name, "new" if kind == "+" else "context"))
+                break
+    known = {name for _, name, _ in out}
+    for n, ctx in f["hunks"]:
+        for rx in SYMBOL:
+            m = rx.match(ctx)
+            if m:
+                name = next(g for g in m.groups() if g)
+                if name not in known:
+                    known.add(name)
+                    out.append((n, name, "changed"))
+                break
+    return sorted(out)
+
+
+COLUMN = re.compile(r"^\s*(\w+)\s+([A-Za-z]+(?:\s*\([^)]*\))?(?:\[\])?)(.*?)(?:--\s*(.*))?$")
+TABLE_FK = re.compile(r"(?i)foreign key\s*\(([^)]*)\)\s*references\s+(\w+)\s*\(([^)]*)\)(.*)")
+INLINE_FK = re.compile(r"(?i)references\s+(\w+)\s*\(([^)]*)\)")
+INDEX = re.compile(r"(?i)create (unique )?index(?: if not exists)? (\w+) on (\w+)\s*(?:using \w+\s*)?(\(.*\))")
+
+
+def parse_sql(files):
+    tables, refs = {}, {}
+    for f in files:
+        if f["bucket"] != "schema" or re.search(r"\.down\.", f["path"]):
+            continue
+        current, buf, note = None, "", ""
+        for n, kind, text in f["lines"]:
+            if kind != "+":
+                continue
+            code, _, comment = text.partition("--")
+            create = re.match(r"(?i)^\s*create table(?: if not exists)? (\w+)", code)
+            alter = re.match(r"(?i)^\s*alter table (\w+)\s+add column(?: if not exists)? (.*?);?\s*$", code)
+            index = INDEX.match(code)
+            if create:
+                current = tables.setdefault(create.group(1), {"name": create.group(1), "new": True, "file": f"{f['path']}:{n}", "cols": [], "idx": []})
+                buf, note = "", ""
+                continue
+            if alter:
+                t = tables.setdefault(alter.group(1), {"name": alter.group(1), "change": "altered", "file": f"{f['path']}:{n}", "cols": [], "idx": []})
+                add_item(t, alter.group(2), comment.strip(), refs)
+                continue
+            if index:
+                t = tables.setdefault(index.group(3), {"name": index.group(3), "change": "new index", "file": f"{f['path']}:{n}", "cols": [], "idx": []})
+                t["idx"].append([index.group(2), index.group(4).strip(), "unique" if index.group(1) else ""])
+                continue
+            if current is None:
+                continue
+            closing = re.match(r"^\s*\)\s*;", code)
+            if not closing:
+                buf += " " + code.strip()
+                note = note or comment.strip()
+            if closing or (buf.rstrip().endswith(",") and buf.count("(") == buf.count(")")):
+                if buf.strip():
+                    add_item(current, buf.strip().rstrip(","), note, refs)
+                buf, note = "", ""
+            if closing:
+                current = None
+    if not tables:
+        return None
+    return {"tables": list(tables.values()), "refs": [{"name": k, "cols": sorted(v)} for k, v in refs.items()]}
+
+
+def add_item(table, item, note, refs):
+    if re.match(r"(?i)^(constraint\b|foreign key|primary key|unique\b|check\b|exclude\b)", item):
+        fk = TABLE_FK.search(item)
+        if fk:
+            cascade = ", cascade" if re.search(r"(?i)on delete cascade", fk.group(4)) else ""
+            refs.setdefault(fk.group(2), set()).update(c.strip() for c in fk.group(3).split(","))
+            for name in (c.strip() for c in fk.group(1).split(",")):
+                for col in table["cols"]:
+                    if col[0] == name and "fk" not in col[2]:
+                        col[2] = ", ".join(x for x in [col[2], f"fk → {fk.group(2)}{cascade}"] if x)
+        return
+    m = COLUMN.match(item)
+    if not m:
+        return
+    col = column(m)
+    col[3] = col[3] or note
+    table["cols"].append(col)
+    inline = INLINE_FK.search(m.group(3) or "")
+    if inline:
+        refs.setdefault(inline.group(1), set()).update(c.strip() for c in inline.group(2).split(","))
+
+
+def column(m):
+    name, typ, rest, comment = m.group(1), m.group(2).lower(), m.group(3) or "", m.group(4) or ""
+    flags = []
+    if re.search(r"(?i)primary key", rest):
+        flags.append("pk")
+    inline = INLINE_FK.search(rest)
+    if inline:
+        flags.append(f"fk → {inline.group(1)}" + (", cascade" if re.search(r"(?i)on delete cascade", rest) else ""))
+    if re.search(r"(?i)\bunique\b", rest):
+        flags.append("unique")
+    if not re.search(r"(?i)not null|primary key", rest):
+        flags.append("null")
+    return [name, typ.replace(" ", ""), ", ".join(flags), comment.strip()]
+
+
+METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+
+
+def parse_openapi(files):
+    routes = []
+    for f in files:
+        if f["bucket"] != "contract" or not re.search(r"\.ya?ml$", f["path"]):
+            continue
+        path, path_indent = None, -1
+        for n, kind, text in f["lines"]:
+            stripped = text.strip()
+            indent = len(text) - len(text.lstrip())
+            if stripped.startswith("/") and stripped.endswith(":") and indent <= 4:
+                path, path_indent = stripped[:-1], indent
+                continue
+            if path and stripped.endswith(":") and stripped[:-1] in METHODS and indent > path_indent and kind == "+":
+                routes.append({"m": stripped[:-1].upper(), "p": path, "ref": f"{f['path']}:{n}"})
+    return routes
+
+
+def pr_meta(pr, repo, diff_file=None):
     fields = "number,title,url,author,baseRefName,headRefName,headRefOid,state,isDraft,additions,deletions,changedFiles,statusCheckRollup,reviewDecision"
     cmd = ["gh", "pr", "view", str(pr), "--json", fields] + (["-R", repo] if repo else [])
     data = json.loads(run(cmd))
@@ -102,7 +266,7 @@ def pr_meta(pr, repo):
     ci = "failing" if conclusions & {"FAILURE", "TIMED_OUT", "CANCELLED", "ERROR"} else (
         "running" if conclusions & {"IN_PROGRESS", "QUEUED", "PENDING"} else ("passing" if checks else "none"))
     owner_repo = repo or re.sub(r"^https://github.com/([^/]+/[^/]+)/pull/.*$", r"\1", data["url"])
-    diff = run(["gh", "pr", "diff", str(pr)] + (["-R", repo] if repo else []))
+    diff = open(diff_file).read() if diff_file else run(["gh", "pr", "diff", str(pr)] + (["-R", repo] if repo else []))
     return {
         "kind": "pr", "repo": owner_repo, "number": data["number"], "title": data["title"], "url": data["url"],
         "author": (data.get("author") or {}).get("login"), "base": data["baseRefName"], "head": data["headRefName"],
@@ -134,13 +298,15 @@ def main():
     src.add_argument("--pr", type=int)
     src.add_argument("--range", help="git range such as main...HEAD, for work with no PR yet")
     ap.add_argument("--repo", help="owner/name when not run inside the repo")
+    ap.add_argument("--diff-file", help="use a saved `gh pr diff` instead of fetching it")
     ap.add_argument("--generated", action="append", default=[], help="extra glob to treat as generated")
     ap.add_argument("-o", "--out", default="change.json")
     ap.add_argument("--diff-out", default="review.diff")
     ap.add_argument("--tests-out", default="tests.diff", help="test files only, for the Given/When/Then pass")
+    ap.add_argument("--index-out", default="review.index", help="path:line of every symbol the change adds or touches")
     args = ap.parse_args()
 
-    meta, diff = pr_meta(args.pr, args.repo) if args.pr else range_meta(args.range)
+    meta, diff = pr_meta(args.pr, args.repo, args.diff_file) if args.pr else range_meta(args.range)
     files = parse_diff(diff)
     for f in files:
         f["bucket"] = classify(f["path"], f["head"], args.generated)
@@ -161,8 +327,8 @@ def main():
     meta["files"] = len(files)
 
     skeleton = {
-        "v": 1, "meta": meta, "summary": "", "verdict": {}, "decisions": [], "schema": None,
-        "model": None, "flows": [], "api": [], "rules": [], "watch": [], "buckets": buckets, "tests": tests,
+        "v": 1, "meta": meta, "schema": parse_sql(files), "api": parse_openapi(files),
+        "buckets": buckets, "tests": tests,
     }
     with open(args.out, "w") as fh:
         json.dump(skeleton, fh, indent=1)
@@ -170,6 +336,13 @@ def main():
     reviewable = [f for f in files if f["bucket"] not in ("generated", "tests")]
     with open(args.diff_out, "w") as fh:
         fh.write("".join(f["chunk"] for f in reviewable))
+
+    with open(args.index_out, "w") as fh:
+        for f in reviewable:
+            found = symbols(f)
+            if found:
+                fh.write(f"{f['path']}\n")
+                fh.write("".join(f"  {n:>5}  {name}{'' if state == 'new' else '  (' + state + ')'}\n" for n, name, state in found))
 
     with open(args.tests_out, "w") as fh:
         fh.write("".join(f["chunk"] for f in files if f["bucket"] == "tests"))
@@ -181,7 +354,16 @@ def main():
         mark = "skip" if b["skip"] else "read"
         print(f"  {b['label']:<16} {len(b['files']):>3} files {lines:>7} lines {lines * 100 // total:>3}%  {mark}", file=sys.stderr)
     read = sum(f["add"] + f["del"] for f in reviewable)
-    print(f"read {read} lines in {args.diff_out}; {sum(len(t['names']) for t in tests)} test names in {args.out}; test bodies in {args.tests_out}", file=sys.stderr)
+    order = sorted(reviewable, key=lambda f: (["schema", "contract", "logic", "wiring", "docs"].index(f["bucket"]), -(f["add"] + f["del"])))
+    print(f"read {read} lines in {args.diff_out}, in this order:", file=sys.stderr)
+    for f in order[:12]:
+        print(f"  {f['add'] + f['del']:>6}  {f['path']}", file=sys.stderr)
+    if len(order) > 12:
+        print(f"  … {len(order) - 12} smaller files", file=sys.stderr)
+    schema = skeleton["schema"]
+    print(f"{args.out}: {sum(len(t['names']) for t in tests)} test names, "
+          f"{len(schema['tables']) if schema else 0} tables, {len(skeleton['api'])} routes prefilled", file=sys.stderr)
+    print(f"{args.index_out}: path:line for every symbol; {args.tests_out}: test bodies for the Given/When/Then subagent", file=sys.stderr)
 
 
 if __name__ == "__main__":

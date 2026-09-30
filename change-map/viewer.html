@@ -746,10 +746,16 @@ function sSchema() {
     ${has(t.idx) ? `<div class="idx tbl-wrap"><table><thead><tr><th>Index</th><th>On</th><th>Serves</th></tr></thead><tbody>${t.idx.map(([n, on, why]) => `<tr><td class="type">${esc(n)}</td><td class="type">${esc(on)}</td><td class="cn">${md(why || "")}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${has(t.notes) ? `<div class="chips">${t.notes.map(n => `<span class="chip">${md(n)}</span>`).join("")}</div>` : ""}
   </div>`).join("");
-  const refCards = (s.refs || []).map(r => `<div class="box refcard" data-ref="${esc(r.name)}"><div class="th"><span class="tn">${esc(r.name)}</span>${r.note ? `<div style="font-size:12px;color:var(--muted)">${md(r.note)}</div>` : ""}</div>${(r.cols || []).map(c => `<div class="rc">${esc(c)}</div>`).join("")}</div>`).join("");
+  const fkOrder = (s.tables || []).flatMap(t => (t.cols || []).map(c => ((c[2] || "").match(/(?:→|->)\s*([a-z_][\w]*)/i) || [])[1]).filter(Boolean));
+  const refsSorted = [...(s.refs || [])].sort((a, b) => (fkOrder.indexOf(a.name) + 1 || 99) - (fkOrder.indexOf(b.name) + 1 || 99));
+  const refCards = refsSorted.map(r => `<div class="box refcard" data-ref="${esc(r.name)}"><div class="th"><span class="tn">${esc(r.name)}</span>${r.note ? `<div style="font-size:12px;color:var(--muted)">${md(r.note)}</div>` : ""}</div>${(r.cols || []).map(c => `<div class="rc">${esc(c)}</div>`).join("")}</div>`).join("");
   onLayout(() => {
     const canvas = $("#er-canvas"); if (!canvas) return;
-    drawLinks(canvas, "er-links", $$("[data-fk]", canvas).map(row => ({ from: row, to: canvas.querySelector(`[data-ref="${CSS.escape(row.dataset.fk)}"] .th`), fromId: row.dataset.fk + row.textContent, toId: row.dataset.fk, label: row.dataset.fklabel, dot: true })));
+    const labelled = new Set();
+    drawLinks(canvas, "er-links", $$("[data-fk]", canvas).map(row => {
+      const first = !labelled.has(row.dataset.fk); labelled.add(row.dataset.fk);
+      return { from: row, to: canvas.querySelector(`[data-ref="${CSS.escape(row.dataset.fk)}"] .th`), fromId: row.dataset.fk + row.textContent, toId: row.dataset.fk, label: first ? row.dataset.fklabel : "", dot: true };
+    }));
   });
   const body = `<div class="canvas" id="er-canvas" style="padding:0"><div class="er">${cards}${refCards ? `<div class="refcards">${refCards}</div>` : ""}</div></div>`;
   return section("schema", "Schema", s.hint || "", body);
