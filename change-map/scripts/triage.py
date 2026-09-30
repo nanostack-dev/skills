@@ -6,7 +6,8 @@
 
 change.json gets meta, buckets and tests. review.diff keeps only the files a
 human has to read (schema, contract, logic, wiring, docs), so the agent reads
-that instead of the whole diff. A summary of where the lines are goes to stderr.
+that instead of the whole diff. tests.diff holds the test files for the
+Given/When/Then pass. A summary of where the lines are goes to stderr.
 """
 
 import argparse
@@ -136,6 +137,7 @@ def main():
     ap.add_argument("--generated", action="append", default=[], help="extra glob to treat as generated")
     ap.add_argument("-o", "--out", default="change.json")
     ap.add_argument("--diff-out", default="review.diff")
+    ap.add_argument("--tests-out", default="tests.diff", help="test files only, for the Given/When/Then pass")
     args = ap.parse_args()
 
     meta, diff = pr_meta(args.pr, args.repo) if args.pr else range_meta(args.range)
@@ -169,6 +171,9 @@ def main():
     with open(args.diff_out, "w") as fh:
         fh.write("".join(f["chunk"] for f in reviewable))
 
+    with open(args.tests_out, "w") as fh:
+        fh.write("".join(f["chunk"] for f in files if f["bucket"] == "tests"))
+
     total = meta["additions"] + meta["deletions"] or 1
     print(f"{meta['files']} files, +{meta['additions']} -{meta['deletions']}", file=sys.stderr)
     for b in buckets:
@@ -176,7 +181,7 @@ def main():
         mark = "skip" if b["skip"] else "read"
         print(f"  {b['label']:<16} {len(b['files']):>3} files {lines:>7} lines {lines * 100 // total:>3}%  {mark}", file=sys.stderr)
     read = sum(f["add"] + f["del"] for f in reviewable)
-    print(f"read {read} lines in {args.diff_out}; {sum(len(t['names']) for t in tests)} test names in {args.out}", file=sys.stderr)
+    print(f"read {read} lines in {args.diff_out}; {sum(len(t['names']) for t in tests)} test names in {args.out}; test bodies in {args.tests_out}", file=sys.stderr)
 
 
 if __name__ == "__main__":

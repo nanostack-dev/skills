@@ -32,7 +32,7 @@
    }
   ]
  },
- "summary": "Adds organization invitations to Anchor. A Product invites an email address to an Organization with one role, gets back a one-time token, delivers it itself, and later accepts it for an existing product user, which creates the membership. Anchor stores only a hash of the token, works out the status when it reads, and emits four new product events.",
+ "summary": "Organizations can now invite people. A Product invites an email with a role, gets a one-time token, sends it however it likes, and later accepts it for a signed-in user, which creates the membership.",
  "verdict": {
   "risk": "medium",
   "door": "two-way",
@@ -66,7 +66,8 @@
     "apps/anchor/internal/invitation/service/service.go:100",
     "apps/anchor/internal/invitation/repository/repository.go:132",
     "apps/anchor/internal/invitation/service/service.go:405"
-   ]
+   ],
+   "see": "race"
   },
   {
    "id": "token-hash",
@@ -80,7 +81,8 @@
     "apps/anchor/internal/security/security.go:96",
     "apps/anchor/migrations/000039_organization_invitations.up.sql:23",
     "apps/anchor/internal/invitation/service/service.go:351"
-   ]
+   ],
+   "see": "resend"
   },
   {
    "id": "no-email",
@@ -92,7 +94,8 @@
    "cost": "Every Product has to build its own email and its own accept page.",
    "refs": [
     "apps/anchor/internal/invitation/service/service.go:21"
-   ]
+   ],
+   "see": "invite"
   },
   {
    "id": "token-bearer",
@@ -104,7 +107,8 @@
    "cost": "The token works like a password: whoever holds it can join with any product user of that Product.",
    "refs": [
     "apps/anchor/internal/invitation/service/service.go:285"
-   ]
+   ],
+   "see": "invite"
   },
   {
    "id": "token-body",
@@ -117,7 +121,8 @@
    "refs": [
     "apps/anchor/cmd/http/openapi.yaml:6728",
     "apps/anchor/internal/api/organization_invitation_api.go:152"
-   ]
+   ],
+   "see": "invite"
   },
   {
    "id": "reuse-addmember",
@@ -130,7 +135,8 @@
    "refs": [
     "apps/anchor/internal/invitation/service/service.go:318",
     "apps/anchor/internal/invitation/service/service.go:328"
-   ]
+   ],
+   "see": "invite"
   }
  ],
  "schema": {
@@ -151,13 +157,13 @@
      [
       "product_id",
       "varchar(255)",
-      "fk → organizations (id, product_id)",
+      "fk",
       "With `organization_id`, pins the row to its organization's Product"
      ],
      [
       "organization_id",
       "varchar(255)",
-      "fk, cascade",
+      "fk → organizations, cascade",
       "Deleting the organization deletes its invitations"
      ],
      [
@@ -218,6 +224,24 @@
      "No `status` column, no CHECK constraints, no business triggers.",
      "The composite foreign key stops an invitation from pointing at another Product's organization.",
      "The down migration drops the table."
+    ]
+   }
+  ],
+  "refs": [
+   {
+    "name": "organizations",
+    "note": "Row locked by every invitation write",
+    "cols": [
+     "id",
+     "product_id"
+    ]
+   },
+   {
+    "name": "product_roles",
+    "note": "Granted on accept",
+    "cols": [
+     "id",
+     "product_id"
     ]
    }
   ]
@@ -306,8 +330,17 @@
      "ok"
     ]
    ],
-   "note": "* 409 if that email already belongs to a member of the organization."
-  }
+   "note": "* 409 if that email already belongs to a member of the organization.",
+   "edges": [
+    "",
+    "2",
+    "2",
+    "0",
+    "",
+    ""
+   ]
+  },
+  "hint": "Three states. Only accepted is written. Expired happens when the clock passes."
  },
  "flows": [
   {
@@ -507,97 +540,553 @@
  "rules": [
   {
    "rule": "The token is shown once and stored only as a hash",
-   "how": "Create and resend return it. Get, search and lookup never do.",
-   "tests": [
-    "ReturnsTokenOnce",
-    "StoresOnlyTheHash",
-    "ReturnsNoToken",
-    "TokenOnlyWhereAnchorDoes"
+   "how": "Only the SHA-256 hash is stored; reads omit the token",
+   "given": "Acme has a pending invitation for ana@acme.io, and its anchor_inv_ token was returned once at creation",
+   "examples": [
+    {
+     "when": "an admin invites ana@acme.io",
+     "then": "201 with anchor_inv_ token, status pending",
+     "ok": true,
+     "test": "TestCreateInvitation_ReturnsTokenOnce"
+    },
+    {
+     "when": "an admin invites ana@acme.io, then the database row is read",
+     "then": "stored token_hash differs from the token",
+     "ok": true,
+     "test": "TestCreateInvitation_StoresOnlyTheHashOfTheToken"
+    },
+    {
+     "when": "the Product looks the invitation up by its token",
+     "then": "token absent from the response",
+     "ok": true,
+     "test": "TestLookupInvitation_ReturnsNoToken"
+    },
+    {
+     "when": "an admin gets the invitation by id",
+     "then": "token and token_hash absent from the response",
+     "ok": true,
+     "test": "TestGetInvitation_ReturnsNoToken"
+    },
+    {
+     "when": "an admin searches Acme's invitations",
+     "then": "token absent from the response",
+     "ok": true,
+     "test": "TestSearchInvitations_ReturnsNoToken"
+    },
+    {
+     "when": "an admin changes the invitation's expiry to one hour ahead",
+     "then": "original token still finds the invitation",
+     "ok": true,
+     "test": "TestUpdateInvitation_KeepsTheTokenValid"
+    },
+    {
+     "when": "an admin deletes the invitation, then the Product looks up its token",
+     "then": "400",
+     "ok": false,
+     "test": "TestDeleteInvitation_KillsTheToken"
+    },
+    {
+     "when": "an admin resends an invitation created with a one-hour expiry",
+     "then": "new anchor_inv_ token, same id, expiry reset to 7 days",
+     "ok": true,
+     "test": "TestResendInvitation_ReturnsANewTokenAndResetsTheExpiry"
+    },
+    {
+     "when": "after a resend, the Product accepts with the old token",
+     "then": "400 TOKEN_NOT_FOUND, no membership",
+     "ok": false,
+     "test": "TestResendInvitation_KillsTheOldToken"
+    },
+    {
+     "when": "after a resend, the Product accepts with the new token",
+     "then": "status accepted, Ana's user is a member",
+     "ok": true,
+     "test": "TestResendInvitation_NewTokenAccepts"
+    },
+    {
+     "when": "the Go SDK creates an invitation against a stubbed Anchor",
+     "then": "SDK exposes the token and pending status",
+     "ok": true,
+     "test": "TestInvitationReturnsTheTokenOnlyWhereAnchorDoes"
+    }
    ]
   },
   {
    "rule": "Expired is computed, never stored",
-   "how": "`DeriveStatus` in the domain, the same predicate in SQL for search",
-   "tests": [
-    "ReadsExpired",
-    "NeverStoresExpired",
-    "TestDeriveStatus",
-    "FilterBy",
-    "DefaultsExpiryToSevenDays",
-    "AcceptsExplicitExpiry",
-    "CreateInvitation_RefusesExpiryInThePast",
-    "RefusesUnknownStatus"
+   "how": "Status is derived from accepted_at and expires_at on every read",
+   "given": "Acme has a pending invitation for ana@acme.io that expires in 7 days",
+   "examples": [
+    {
+     "when": "after the expiry passed, the Product looks the token up",
+     "then": "status reads expired",
+     "ok": true,
+     "test": "TestLookupInvitation_ReadsExpiredOnceTheExpiryHasPassed"
+    },
+    {
+     "when": "after the expiry passed, an admin gets the invitation",
+     "then": "status reads expired (was pending before)",
+     "ok": true,
+     "test": "TestGetInvitation_ReadsExpiredOnceTheExpiryHasPassed"
+    },
+    {
+     "when": "after the expiry passed, the database schema and row are inspected",
+     "then": "no status column, accepted_at still empty",
+     "ok": true,
+     "test": "TestGetInvitation_NeverStoresExpired"
+    },
+    {
+     "when": "after the expiry passed, an admin searches the invitations",
+     "then": "the one item reads expired",
+     "ok": true,
+     "test": "TestSearchInvitations_ReadsExpiredOnceTheExpiryHasPassed"
+    },
+    {
+     "when": "with a second expired invitation, an admin searches with status pending",
+     "then": "only the pending one returned",
+     "ok": true,
+     "test": "TestSearchInvitations_FilterByPendingKeepsOnlyPendingAndDropsExpired"
+    },
+    {
+     "when": "with a second expired invitation, an admin searches with status expired",
+     "then": "only the expired one returned",
+     "ok": true,
+     "test": "TestSearchInvitations_FilterByExpiredKeepsAPendingInvitationWhoseExpiryPassed"
+    },
+    {
+     "when": "with a second invitation accepted, an admin searches with status accepted",
+     "then": "only the accepted one returned",
+     "ok": true,
+     "test": "TestSearchInvitations_FilterByAcceptedKeepsOnlyAccepted"
+    },
+    {
+     "when": "with one expired and one accepted, an admin filters pending and expired",
+     "then": "the pending and expired ones, not accepted",
+     "ok": true,
+     "test": "TestSearchInvitations_FilterByTwoStatusesKeepsBoth"
+    },
+    {
+     "when": "an admin searches with the status \"revoked\"",
+     "then": "400",
+     "ok": false,
+     "test": "TestSearchInvitations_RefusesUnknownStatus"
+    },
+    {
+     "when": "the status rule is run on five accepted_at and expires_at combinations",
+     "then": "pending, expired at expiry, accepted wins",
+     "ok": true,
+     "test": "TestDeriveStatus"
+    }
    ]
   },
   {
    "rule": "One pending invitation per email per organization",
-   "how": "Checked in the service under the organization lock",
-   "tests": [
-    "SecondPendingForSameEmail",
-    "ComparesEmailWithoutRegardToCase",
-    "AfterFirstExpired",
-    "SameEmailInAnotherOrganization",
-    "UnderConcurrentCreates",
-    "FreesTheEmail"
+   "how": "Checked in the service under the organization row lock",
+   "given": "Acme has a pending invitation for ana@acme.io",
+   "examples": [
+    {
+     "when": "an admin invites ana@acme.io again",
+     "then": "409 ALREADY_PENDING, still one invitation",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesSecondPendingForSameEmail"
+    },
+    {
+     "when": "Acme has a pending invitation for Casey@Example.com, an admin invites casey@example.COM",
+     "then": "409 ALREADY_PENDING",
+     "ok": false,
+     "test": "TestCreateInvitation_ComparesEmailWithoutRegardToCase"
+    },
+    {
+     "when": "after the invitation expired, an admin invites ana@acme.io",
+     "then": "201, new id, old one reads expired",
+     "ok": true,
+     "test": "TestCreateInvitation_AllowsNewInvitationAfterFirstExpired"
+    },
+    {
+     "when": "an admin invites ana@acme.io to Globex",
+     "then": "201, status pending",
+     "ok": true,
+     "test": "TestCreateInvitation_AllowsSameEmailInAnotherOrganization"
+    },
+    {
+     "when": "eight admins invite bob@acme.io at the same instant",
+     "then": "one 201, seven 409, one invitation stored",
+     "ok": true,
+     "race": true,
+     "test": "TestCreateInvitation_HoldsOnePendingPerEmailUnderConcurrentCreates"
+    },
+    {
+     "when": "after an admin deleted the invitation, an admin invites ana@acme.io",
+     "then": "201, status pending",
+     "ok": true,
+     "test": "TestDeleteInvitation_FreesTheEmailForANewInvitation"
+    }
    ]
   },
   {
    "rule": "No invitation for an existing member",
-   "how": "Joins memberships to product users, compares emails without case",
-   "tests": [
-    "EmailOfExistingMember",
-    "MemberEmailWithoutRegardToCase",
-    "EmailOfMemberOfAnotherOrganization"
+   "how": "Member emails are compared case-insensitively before creating",
+   "given": "Ben (ben@acme.io) is already a member of Acme",
+   "examples": [
+    {
+     "when": "an admin invites ben@acme.io",
+     "then": "409 EMAIL_IS_MEMBER",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesEmailOfExistingMember"
+    },
+    {
+     "when": "Ben is a member as Member@Example.com, an admin invites member@example.com",
+     "then": "409 EMAIL_IS_MEMBER",
+     "ok": false,
+     "test": "TestCreateInvitation_ComparesMemberEmailWithoutRegardToCase"
+    },
+    {
+     "when": "an admin invites ben@acme.io to Globex, where he is no member",
+     "then": "201, status pending",
+     "ok": true,
+     "test": "TestCreateInvitation_AllowsEmailOfMemberOfAnotherOrganization"
+    },
+    {
+     "when": "with a pending invitation for ana@acme.io, the Product accepts it for Ben",
+     "then": "409 MEMBERSHIP_ALREADY_EXISTS, invitation stays pending",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesAProductUserWhoIsAlreadyAMember"
+    }
    ]
   },
   {
    "rule": "Update and resend only touch a pending invitation",
-   "how": "`refuseUnlessPending` returns 409 for accepted or expired",
-   "tests": [
-    "UpdateInvitation_",
-    "ResendInvitation_Returns",
-    "ResendInvitation_Kills",
-    "ResendInvitation_NewToken",
-    "ResendInvitation_Keeps",
-    "ResendInvitation_Refuses"
+   "how": "Both routes refuse expired and accepted invitations with 409",
+   "given": "Acme has a pending invitation for ana@acme.io with the role \"member\"",
+   "examples": [
+    {
+     "when": "an admin sets another role and a 30-day expiry",
+     "then": "new role and expiry, same email",
+     "ok": true,
+     "test": "TestUpdateInvitation_ChangesRoleAndExpiry"
+    },
+    {
+     "when": "an admin updates it with a different email in the body",
+     "then": "200, email unchanged",
+     "ok": true,
+     "test": "TestUpdateInvitation_IgnoresAnEmailInTheBody"
+    },
+    {
+     "when": "after the invitation expired, an admin updates it",
+     "then": "409 EXPIRED, still reads expired",
+     "ok": false,
+     "test": "TestUpdateInvitation_RefusesAnExpiredInvitation"
+    },
+    {
+     "when": "after Ben accepted, an admin updates its role",
+     "then": "409 ALREADY_ACCEPTED, role unchanged",
+     "ok": false,
+     "test": "TestUpdateInvitation_RefusesAnAcceptedInvitation"
+    },
+    {
+     "when": "an admin resends the invitation",
+     "then": "status pending, same email",
+     "ok": true,
+     "test": "TestResendInvitation_KeepsTheInvitationPending"
+    },
+    {
+     "when": "after the invitation expired, an admin resends it",
+     "then": "409 EXPIRED, old token still works",
+     "ok": false,
+     "test": "TestResendInvitation_RefusesAnExpiredInvitation"
+    },
+    {
+     "when": "after Ben accepted, an admin resends it",
+     "then": "409 ALREADY_ACCEPTED",
+     "ok": false,
+     "test": "TestResendInvitation_RefusesAnAcceptedInvitation"
+    }
    ]
   },
   {
    "rule": "Accept is atomic and trusts the token",
-   "how": "One transaction. Never creates a product user, never compares emails.",
-   "tests": [
-    "CreatesTheMembership",
-    "WhenTheProductUserEmailDiffers",
-    "AcceptInvitation_RefusesAn",
-    "AcceptInvitation_RefusesUnknown",
-    "ProductUserOfAnotherProduct",
-    "NeverCreatesAProductUser",
-    "AlreadyAMember",
-    "JoinAnotherOrganization",
-    "UnderConcurrentAccepts",
-    "RefusalIsPermanent"
+   "how": "Token and existing product user are the only inputs",
+   "given": "Acme has a pending invitation for ana@acme.io, and Ben is a product user who is not a member",
+   "examples": [
+    {
+     "when": "the Product looks the invitation up by its token",
+     "then": "the invitation with its email and organization",
+     "ok": true,
+     "test": "TestLookupInvitation_FindsTheInvitationByItsToken"
+    },
+    {
+     "when": "the Product looks up the token anchor_inv_unknown",
+     "then": "400 TOKEN_NOT_FOUND",
+     "ok": false,
+     "test": "TestLookupInvitation_RefusesUnknownToken"
+    },
+    {
+     "when": "the Product accepts the token for Ben",
+     "then": "accepted, Ben is a member with the invited role",
+     "ok": true,
+     "test": "TestAcceptInvitation_CreatesTheMembershipWithTheInvitedRole"
+    },
+    {
+     "when": "the Product accepts it for a user whose email differs from ana@acme.io",
+     "then": "accepted, user becomes a member",
+     "ok": true,
+     "test": "TestAcceptInvitation_AcceptsWhenTheProductUserEmailDiffers"
+    },
+    {
+     "when": "the Product accepts the token anchor_inv_unknown for Ben",
+     "then": "400 TOKEN_NOT_FOUND, Ben not a member",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesUnknownToken"
+    },
+    {
+     "when": "after Ben accepted, the Product accepts the same token for Cleo",
+     "then": "409 ALREADY_ACCEPTED, Cleo not a member",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesAnAcceptedInvitation"
+    },
+    {
+     "when": "after the invitation expired, the Product accepts it for Ben",
+     "then": "409 EXPIRED, no membership, not accepted",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesAnExpiredInvitation"
+    },
+    {
+     "when": "the Product accepts the token for a user id that does not exist",
+     "then": "400 PRODUCT_USER_NOT_FOUND_IN_REQUEST, still pending",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesUnknownProductUser"
+    },
+    {
+     "when": "the Product accepts the token for a user id that does not exist",
+     "then": "product user count unchanged",
+     "ok": false,
+     "test": "TestAcceptInvitation_NeverCreatesAProductUser"
+    },
+    {
+     "when": "with a second invitation to Globex, the Product accepts both for Ben",
+     "then": "Ben is a member of Acme and Globex",
+     "ok": true,
+     "test": "TestAcceptInvitation_AllowsTheSameProductUserToJoinAnotherOrganization"
+    },
+    {
+     "when": "six product users accept the same token at the same instant",
+     "then": "one 200, five 409, one membership",
+     "ok": true,
+     "race": true,
+     "test": "TestAcceptInvitation_CreatesOneMembershipUnderConcurrentAccepts"
+    }
    ]
   },
   {
    "rule": "Every write emits its event, with identifiers only",
-   "how": "CaptureEvents checks Standard Webhooks on each delivery",
-   "tests": [
-    "Emits",
-    "CarryIdentifiersOnly",
-    "WebhookHandlerOrganizationInvitationAccepted"
+   "how": "Events carry ids only, never the email or token",
+   "given": "Acme has a pending invitation for ana@acme.io and the Product is capturing events",
+   "examples": [
+    {
+     "when": "an admin invites ana@acme.io",
+     "then": "organization.invitation.created is emitted",
+     "ok": true,
+     "test": "TestCreateInvitation_EmitsTheCreatedEvent"
+    },
+    {
+     "when": "an admin invites ana@acme.io and the created event is read",
+     "then": "only organization_id and invitation_id; no email, no token",
+     "ok": true,
+     "test": "TestInvitationEvents_CarryIdentifiersOnly"
+    },
+    {
+     "when": "an admin updates the invitation's role and expiry",
+     "then": "organization.invitation.updated is emitted",
+     "ok": true,
+     "test": "TestUpdateInvitation_EmitsTheUpdatedEvent"
+    },
+    {
+     "when": "an admin resends the invitation",
+     "then": "organization.invitation.updated is emitted",
+     "ok": true,
+     "test": "TestResendInvitation_EmitsTheUpdatedEvent"
+    },
+    {
+     "when": "an admin deletes the invitation",
+     "then": "organization.invitation.deleted is emitted",
+     "ok": true,
+     "test": "TestDeleteInvitation_EmitsTheDeletedEvent"
+    },
+    {
+     "when": "the Product accepts the token for Ben",
+     "then": "accepted event with user id, plus membership.created",
+     "ok": true,
+     "test": "TestAcceptInvitation_EmitsTheAcceptedEventAndTheMembershipCreatedEvent"
+    },
+    {
+     "when": "after the invitation expired, the Product accepts it for Ben",
+     "then": "no accepted event, no membership event",
+     "ok": false,
+     "test": "TestAcceptInvitation_EmitsNoEventWhenTheAcceptIsRefused"
+    },
+    {
+     "when": "the Go SDK receives a signed invitation.accepted webhook",
+     "then": "handler gets the three ids, HTTP 200",
+     "ok": true,
+     "test": "TestWebhookHandlerOrganizationInvitationAccepted"
+    }
    ]
   },
   {
    "rule": "Tenants and scopes are isolated",
-   "how": "Another Product, another tenant, another organization, a key missing the scope",
-   "tests": [
-    "AnotherProductCannotReach",
-    "PlatformOwnerOfAnotherTenant",
-    "InvitationRoutes_",
-    "OfAnotherOrganization",
-    "RoleOfAnotherProduct",
-    "RefusesUnknownOrganization",
-    "ListsOnlyTheInvitationsOfTheOrganization"
+   "how": "Every route checks product ownership and the API key scope",
+   "given": "Acme belongs to Product A and has a pending invitation for ana@acme.io",
+   "examples": [
+    {
+     "when": "an admin invites ana@acme.io with a role from another Product",
+     "then": "400 ROLE_NOT_FOUND_IN_REQUEST",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesRoleOfAnotherProduct"
+    },
+    {
+     "when": "a second Product calls all eight invitation routes on Acme's invitation",
+     "then": "404 on routes by id, 400 on token routes",
+     "ok": false,
+     "test": "TestInvitations_AnotherProductCannotReachAnInvitationOfThisProduct"
+    },
+    {
+     "when": "the platform owner of another tenant gets the invitation",
+     "then": "404",
+     "ok": false,
+     "test": "TestInvitations_APlatformOwnerOfAnotherTenantCannotReachThem"
+    },
+    {
+     "when": "the Product accepts the token for a user of another Product",
+     "then": "400 PRODUCT_USER_NOT_FOUND_IN_REQUEST, still pending",
+     "ok": false,
+     "test": "TestAcceptInvitation_RefusesProductUserOfAnotherProduct"
+    },
+    {
+     "when": "an admin gets Acme's invitation through the Globex organization",
+     "then": "404",
+     "ok": false,
+     "test": "TestGetInvitation_RefusesInvitationOfAnotherOrganization"
+    },
+    {
+     "when": "Globex also has an invitation, an admin searches Acme's invitations",
+     "then": "only Acme's invitation listed",
+     "ok": true,
+     "test": "TestSearchInvitations_ListsOnlyTheInvitationsOfTheOrganization"
+    },
+    {
+     "when": "a key holding every invitation scope but the route's own calls it",
+     "then": "403 on all eight routes",
+     "ok": false,
+     "test": "TestInvitationRoutes_RefuseAKeyWithoutTheScopeOfTheOperation"
+    },
+    {
+     "when": "a key holding only the route's own scope calls it",
+     "then": "success on all eight routes",
+     "ok": true,
+     "test": "TestInvitationRoutes_AcceptAKeyHoldingOnlyTheScopeOfTheOperation"
+    },
+    {
+     "when": "an admin deletes Acme's invitation through the Globex organization",
+     "then": "404, invitation still exists",
+     "ok": false,
+     "test": "TestDeleteInvitation_RefusesInvitationOfAnotherOrganization"
+    }
+   ]
+  },
+  {
+   "rule": "Everyday reads and writes",
+   "how": "Plain validation and lookup behaviour outside the rules above",
+   "given": "Acme has an admin role and no other invitations",
+   "examples": [
+    {
+     "when": "an admin invites ana@acme.io without an expiry",
+     "then": "expiry is 7 days ahead",
+     "ok": true,
+     "test": "TestCreateInvitation_DefaultsExpiryToSevenDays"
+    },
+    {
+     "when": "an admin invites ana@acme.io with a 48-hour expiry",
+     "then": "expiry is 48 hours ahead",
+     "ok": true,
+     "test": "TestCreateInvitation_AcceptsExplicitExpiry"
+    },
+    {
+     "when": "an admin invites ana@acme.io with an expiry a minute ago",
+     "then": "400 EXPIRY_NOT_IN_FUTURE",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesExpiryInThePast"
+    },
+    {
+     "when": "an admin invites ana@acme.io with a role id that does not exist",
+     "then": "400 ROLE_NOT_FOUND_IN_REQUEST",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesUnknownRole"
+    },
+    {
+     "when": "an admin invites ana@acme.io to an organization that does not exist",
+     "then": "404",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesUnknownOrganization"
+    },
+    {
+     "when": "an admin invites \"not-an-email\"",
+     "then": "400 BAD_REQUEST",
+     "ok": false,
+     "test": "TestCreateInvitation_RefusesMalformedEmail"
+    },
+    {
+     "when": "an admin gets an invitation id that does not exist",
+     "then": "404 INVITATION_NOT_FOUND",
+     "ok": false,
+     "test": "TestGetInvitation_RefusesUnknownInvitation"
+    },
+    {
+     "when": "an admin searches an organization that does not exist",
+     "then": "404",
+     "ok": false,
+     "test": "TestSearchInvitations_RefusesUnknownOrganization"
+    },
+    {
+     "when": "an admin updates a pending invitation with an expiry a minute ago",
+     "then": "400 EXPIRY_NOT_IN_FUTURE",
+     "ok": false,
+     "test": "TestUpdateInvitation_RefusesExpiryInThePast"
+    },
+    {
+     "when": "an admin updates a pending invitation to a role that does not exist",
+     "then": "400 ROLE_NOT_FOUND_IN_REQUEST",
+     "ok": false,
+     "test": "TestUpdateInvitation_RefusesUnknownRole"
+    },
+    {
+     "when": "an admin updates an invitation id that does not exist",
+     "then": "404",
+     "ok": false,
+     "test": "TestUpdateInvitation_RefusesUnknownInvitation"
+    },
+    {
+     "when": "an admin deletes the invitation",
+     "then": "get returns 404, search returns nothing",
+     "ok": true,
+     "test": "TestDeleteInvitation_RemovesTheInvitation"
+    },
+    {
+     "when": "an admin deletes an invitation id that does not exist",
+     "then": "404",
+     "ok": false,
+     "test": "TestDeleteInvitation_RefusesUnknownInvitation"
+    },
+    {
+     "when": "an admin resends an invitation id that does not exist",
+     "then": "404",
+     "ok": false,
+     "test": "TestResendInvitation_RefusesUnknownInvitation"
+    },
+    {
+     "when": "the Go SDK accepts an expired invitation, with three retries allowed",
+     "then": "permanent error after exactly one request",
+     "ok": false,
+     "test": "TestInvitationRefusalIsPermanent"
+    }
    ]
   }
  ],
@@ -1069,5 +1558,588 @@
    ]
   }
  ],
- "apiHint": "New permission domain `organization_invitation`. Scopes below drop that prefix."
+ "apiHint": "New permission domain `organization_invitation`. Scopes below drop that prefix.",
+ "system": {
+  "cols": [
+   "Product side",
+   "Anchor API",
+   "Anchor services",
+   "Storage and events"
+  ],
+  "nodes": [
+   {
+    "id": "admin",
+    "label": "Org admin",
+    "sub": "in the Product UI",
+    "kind": "person",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "product",
+    "label": "Product backend",
+    "sub": "EchoPoint or any Product",
+    "kind": "service",
+    "col": 0,
+    "row": 1
+   },
+   {
+    "id": "invitee",
+    "label": "Invitee",
+    "sub": "gets the email, signs in",
+    "kind": "person",
+    "col": 0,
+    "row": 2
+   },
+   {
+    "id": "api",
+    "label": "8 invitation routes",
+    "sub": "token only in bodies",
+    "kind": "api",
+    "col": 1,
+    "row": 1,
+    "status": "new"
+   },
+   {
+    "id": "svc",
+    "label": "Invitation service",
+    "sub": "own fx module",
+    "kind": "service",
+    "col": 2,
+    "row": 0,
+    "status": "new"
+   },
+   {
+    "id": "member",
+    "label": "Membership service",
+    "sub": "`AddMember`, reused on accept",
+    "kind": "service",
+    "col": 2,
+    "row": 2,
+    "status": "changed"
+   },
+   {
+    "id": "table",
+    "label": "organization_invitations",
+    "sub": "token hash, no status",
+    "kind": "db",
+    "col": 3,
+    "row": 0,
+    "status": "new"
+   },
+   {
+    "id": "orgs",
+    "label": "organizations",
+    "sub": "row lock on each write",
+    "kind": "db",
+    "col": 3,
+    "row": 1
+   },
+   {
+    "id": "events",
+    "label": "Product events",
+    "sub": "4 new `invitation.*` types",
+    "kind": "queue",
+    "col": 3,
+    "row": 2,
+    "status": "new"
+   }
+  ],
+  "edges": [
+   {
+    "from": "admin",
+    "to": "product",
+    "label": "invite ana@acme.io"
+   },
+   {
+    "from": "product",
+    "to": "api",
+    "label": "create · resend",
+    "status": "new"
+   },
+   {
+    "from": "invitee",
+    "to": "api",
+    "label": "lookup · accept, via the Product",
+    "status": "new"
+   },
+   {
+    "from": "product",
+    "to": "invitee",
+    "label": "emails the token"
+   },
+   {
+    "from": "api",
+    "to": "svc",
+    "status": "new"
+   },
+   {
+    "from": "svc",
+    "to": "table",
+    "label": "insert · replace hash",
+    "status": "new"
+   },
+   {
+    "from": "svc",
+    "to": "orgs",
+    "label": "FOR NO KEY UPDATE",
+    "status": "new"
+   },
+   {
+    "from": "svc",
+    "to": "member",
+    "label": "on accept",
+    "status": "new"
+   },
+   {
+    "from": "member",
+    "to": "events",
+    "label": "membership.created"
+   }
+  ]
+ },
+ "scenarios": [
+  {
+   "id": "invite",
+   "title": "Ana gets invited and joins",
+   "caption": "The whole round trip, from an admin clicking Invite to Ana being a member.",
+   "actors": [
+    {
+     "id": "admin",
+     "label": "Acme admin",
+     "sub": "person",
+     "kind": "person"
+    },
+    {
+     "id": "product",
+     "label": "Product",
+     "sub": "EchoPoint",
+     "kind": "service"
+    },
+    {
+     "id": "anchor",
+     "label": "Anchor",
+     "sub": "invitation service",
+     "kind": "service"
+    },
+    {
+     "id": "db",
+     "label": "Postgres",
+     "sub": "invitations table",
+     "kind": "db"
+    },
+    {
+     "id": "ana",
+     "label": "Ana",
+     "sub": "invitee",
+     "kind": "person"
+    }
+   ],
+   "board": {
+    "title": "organization_invitations",
+    "cols": [
+     "email",
+     "role",
+     "token_hash",
+     "accepted_at",
+     "status"
+    ],
+    "rows": []
+   },
+   "steps": [
+    {
+     "from": "admin",
+     "to": "product",
+     "k": "call",
+     "label": "Invite ana@acme.io as member",
+     "say": "An admin of Acme invites Ana in the Product UI."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "POST …/invitations",
+     "say": "The Product calls Anchor with the email and the role."
+    },
+    {
+     "from": "anchor",
+     "to": "db",
+     "k": "call",
+     "label": "lock Acme, insert row",
+     "say": "Anchor locks the organization row, checks the rules, and stores the invitation with only the **hash** of the token.",
+     "board": [
+      [
+       "ana@acme.io",
+       "member",
+       "sha256(7Hk…)",
+       "—",
+       "pending"
+      ]
+     ]
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "reply",
+     "label": "201 · token anchor_inv_7Hk…",
+     "say": "The clear token exists in this one response. Anchor cannot show it again."
+    },
+    {
+     "from": "product",
+     "to": "ana",
+     "k": "call",
+     "label": "email with accept link",
+     "say": "The Product sends the email. Anchor sends none."
+    },
+    {
+     "from": "ana",
+     "to": "product",
+     "k": "call",
+     "label": "clicks, signs in",
+     "say": "Ana opens the link and signs in, maybe with a different email address."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "POST /invitations/lookup {token}",
+     "say": "The Product looks the token up to render its accept page. The token is in the body, never in the URL."
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "reply",
+     "label": "200 · pending, Acme, member",
+     "say": "Lookup returns the invitation and its computed status, without the token."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "POST /invitations/accept {token, user}",
+     "say": "Ana clicks Accept. The Product sends the token and her existing product user."
+    },
+    {
+     "from": "anchor",
+     "to": "db",
+     "k": "call",
+     "label": "lock · AddMember · accepted_at",
+     "say": "One transaction: lock, re-check it is pending, add the membership, mark it accepted.",
+     "board": [
+      [
+       "ana@acme.io",
+       "member",
+       "sha256(7Hk…)",
+       "Sep 29 14:02",
+       "accepted"
+      ]
+     ]
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "reply",
+     "label": "200 · 2 events emitted",
+     "say": "`invitation.accepted` and `membership.created` go out together. Ana is a member of Acme."
+    }
+   ]
+  },
+  {
+   "id": "race",
+   "title": "Two admins invite Bob at once",
+   "caption": "Why the organization row lock exists. Without it, both requests would see no pending invitation and both would insert.",
+   "actors": [
+    {
+     "id": "a",
+     "label": "Admin A",
+     "sub": "person",
+     "kind": "person"
+    },
+    {
+     "id": "ra",
+     "label": "Request A",
+     "sub": "Anchor transaction",
+     "kind": "service"
+    },
+    {
+     "id": "db",
+     "label": "Postgres",
+     "sub": "Acme row",
+     "kind": "db"
+    },
+    {
+     "id": "rb",
+     "label": "Request B",
+     "sub": "Anchor transaction",
+     "kind": "service"
+    },
+    {
+     "id": "b",
+     "label": "Admin B",
+     "sub": "person",
+     "kind": "person"
+    }
+   ],
+   "board": {
+    "title": "State in Postgres",
+    "cols": [
+     "what",
+     "value"
+    ],
+    "rows": [
+     [
+      "lock on Acme row",
+      "free"
+     ],
+     [
+      "pending for bob@acme.io",
+      "0"
+     ]
+    ]
+   },
+   "steps": [
+    {
+     "from": "a",
+     "to": "ra",
+     "k": "call",
+     "label": "invite bob@acme.io",
+     "say": "Admin A invites Bob."
+    },
+    {
+     "from": "b",
+     "to": "rb",
+     "k": "call",
+     "label": "invite bob@acme.io",
+     "say": "In the same millisecond, Admin B invites Bob too."
+    },
+    {
+     "from": "ra",
+     "to": "db",
+     "k": "call",
+     "label": "SELECT Acme FOR NO KEY UPDATE",
+     "say": "Request A takes the lock on the Acme row.",
+     "board": [
+      [
+       "lock on Acme row",
+       "held by A"
+      ],
+      [
+       "pending for bob@acme.io",
+       "0"
+      ]
+     ]
+    },
+    {
+     "from": "rb",
+     "to": "db",
+     "k": "block",
+     "until": 7,
+     "label": "SELECT Acme FOR NO KEY UPDATE",
+     "say": "Request B asks for the same lock and **waits**. It has read nothing yet."
+    },
+    {
+     "from": "ra",
+     "to": "db",
+     "k": "call",
+     "label": "pending for bob? none",
+     "say": "Request A checks: no pending invitation for Bob."
+    },
+    {
+     "from": "ra",
+     "to": "db",
+     "k": "call",
+     "label": "insert, commit",
+     "say": "Request A inserts the invitation and commits. The lock is released.",
+     "board": [
+      [
+       "lock on Acme row",
+       "free"
+      ],
+      [
+       "pending for bob@acme.io",
+       "1"
+      ]
+     ]
+    },
+    {
+     "from": "ra",
+     "to": "a",
+     "k": "reply",
+     "label": "201 created",
+     "say": "Admin A gets the invitation and its token."
+    },
+    {
+     "from": "db",
+     "to": "rb",
+     "k": "reply",
+     "label": "lock granted",
+     "say": "Request B finally gets the lock, and now sees the committed row.",
+     "board": [
+      [
+       "lock on Acme row",
+       "held by B"
+      ],
+      [
+       "pending for bob@acme.io",
+       "1"
+      ]
+     ]
+    },
+    {
+     "from": "rb",
+     "to": "db",
+     "k": "call",
+     "label": "pending for bob? yes",
+     "say": "Request B checks and finds the invitation A just created."
+    },
+    {
+     "from": "rb",
+     "to": "b",
+     "k": "error",
+     "label": "409 ALREADY_PENDING",
+     "say": "Admin B gets a conflict. Bob has exactly one pending invitation. A CT runs this with eight admins.",
+     "board": [
+      [
+       "lock on Acme row",
+       "free"
+      ],
+      [
+       "pending for bob@acme.io",
+       "1"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "resend",
+   "title": "Resend kills the old token",
+   "caption": "Only the hash is stored, so a lost token cannot be shown again. Resend issues a new one and the old one stops working.",
+   "actors": [
+    {
+     "id": "admin",
+     "label": "Acme admin",
+     "sub": "person",
+     "kind": "person"
+    },
+    {
+     "id": "product",
+     "label": "Product",
+     "sub": "EchoPoint",
+     "kind": "service"
+    },
+    {
+     "id": "anchor",
+     "label": "Anchor",
+     "sub": "invitation service",
+     "kind": "service"
+    },
+    {
+     "id": "db",
+     "label": "Postgres",
+     "sub": "invitations table",
+     "kind": "db"
+    }
+   ],
+   "board": {
+    "title": "organization_invitations · ana@acme.io",
+    "cols": [
+     "token_hash",
+     "expires_at",
+     "accepts?"
+    ],
+    "rows": [
+     [
+      "sha256(7Hk…)",
+      "Oct 1",
+      "yes"
+     ]
+    ]
+   },
+   "steps": [
+    {
+     "from": "admin",
+     "to": "product",
+     "k": "call",
+     "label": "Ana lost the email, resend",
+     "say": "Ana deleted the email. The admin clicks Resend."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "POST …/{id}/resend",
+     "say": "The Product asks Anchor for a new token."
+    },
+    {
+     "from": "anchor",
+     "to": "db",
+     "k": "call",
+     "label": "replace hash, expiry = now + 7d",
+     "say": "Anchor overwrites the hash and resets the expiry. A custom expiry is lost here (see Worth a look).",
+     "board": [
+      [
+       "~sha256(7Hk…)",
+       "~Oct 1",
+       "no"
+      ],
+      [
+       "sha256(Q2m…)",
+       "Oct 6",
+       "yes"
+      ]
+     ]
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "reply",
+     "label": "200 · token anchor_inv_Q2m…",
+     "say": "The new token is returned once. The Product emails it."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "accept with anchor_inv_7Hk…",
+     "say": "Later, someone tries the old link."
+    },
+    {
+     "from": "anchor",
+     "to": "db",
+     "k": "call",
+     "label": "find by sha256(7Hk…)",
+     "say": "Anchor hashes the old token and looks it up."
+    },
+    {
+     "from": "db",
+     "to": "anchor",
+     "k": "reply",
+     "label": "no row",
+     "say": "No row carries that hash any more."
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "error",
+     "label": "400 TOKEN_NOT_FOUND",
+     "say": "The old token is refused. Nobody joins."
+    },
+    {
+     "from": "product",
+     "to": "anchor",
+     "k": "call",
+     "label": "accept with anchor_inv_Q2m…",
+     "say": "Ana uses the new link."
+    },
+    {
+     "from": "anchor",
+     "to": "product",
+     "k": "reply",
+     "label": "200 · accepted",
+     "say": "The new token works. Ana is a member."
+    }
+   ]
+  }
+ ]
 }

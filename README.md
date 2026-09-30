@@ -28,5 +28,5 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
   hardcoding, verifying side effects at the third party, and keeping assertions
   in step with a status change.
 - [`change-map`](change-map/SKILL.md) — turn a PR or in-progress branch into an
-  interactive review page: decisions to approve, lifecycle, schema, flows, API,
-  rules mapped to tests, and how much of the diff is noise.
+  picture-first review page: system diagram, decisions to approve, animated
+  scenarios, lifecycle, ER schema, tests as Given/When/Then, and the noise split.

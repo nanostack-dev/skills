@@ -16,7 +16,7 @@ import sys
 import urllib.request
 
 VIEWER_URL = "https://raw.githubusercontent.com/nanostack-dev/skills/main/change-map/viewer.html"
-CAPS = {"decisions": 7, "watch": 6, "flows": 5, "api": 16, "rules": 10}
+CAPS = {"decisions": 7, "watch": 6, "flows": 5, "api": 16, "rules": 10, "scenarios": 4}
 
 
 def read_viewer(where):
@@ -43,6 +43,36 @@ def check(data):
         tx = f.get("tx")
         if tx and not (0 <= tx[0] <= tx[1] < len(f.get("steps") or [])):
             problems.append(f"flow {f.get('name')!r} has tx {tx} outside its steps")
+    scenario_ids = {sc.get("id") for sc in data.get("scenarios") or []}
+    for d in data.get("decisions") or []:
+        if d.get("see") and d["see"] not in scenario_ids:
+            problems.append(f"decision {d.get('id')!r} points at missing scenario {d['see']!r}")
+    for sc in data.get("scenarios") or []:
+        actors = {a["id"] for a in sc.get("actors") or []}
+        steps = sc.get("steps") or []
+        if len(steps) > 12:
+            problems.append(f"scenario {sc.get('id')!r} has {len(steps)} steps, cap is 12")
+        for i, st in enumerate(steps):
+            for end in ("from", "to"):
+                if st.get(end) is not None and st[end] not in actors:
+                    problems.append(f"scenario {sc.get('id')!r} step {i} {end} {st[end]!r} is not an actor")
+            if st.get("k") == "block" and not (i < st.get("until", -1) < len(steps)):
+                problems.append(f"scenario {sc.get('id')!r} step {i} blocks until a step that does not follow it")
+    nodes = {n["id"] for n in (data.get("system") or {}).get("nodes") or []}
+    if len(nodes) > 12:
+        problems.append(f"system has {len(nodes)} nodes, cap is 12")
+    for e in (data.get("system") or {}).get("edges") or []:
+        if e.get("from") not in nodes or e.get("to") not in nodes:
+            problems.append(f"system edge {e.get('from')} -> {e.get('to')} names a missing node")
+    names = {n for t in data.get("tests") or [] for n in t.get("names") or []}
+    examples = [e.get("test") for r in data.get("rules") or [] for e in r.get("examples") or []]
+    if names and examples:
+        missing = names - set(examples)
+        unknown = set(examples) - names
+        if missing:
+            problems.append(f"{len(missing)} tests have no Given/When/Then row, e.g. {sorted(missing)[0]}")
+        if unknown:
+            problems.append(f"{len(unknown)} examples name a test that is not in the diff, e.g. {sorted(unknown)[0]}")
     return problems
 
 
