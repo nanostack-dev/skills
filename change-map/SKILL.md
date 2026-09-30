@@ -56,7 +56,7 @@ Read `template.json` (4 KB). It shows every key in its exact shape. Do not open 
 Write the whole file in one go. Caps: 7 decisions, 6 watch, 4 scenarios of at most 12 steps, 12 system nodes, 5 flows of at most 8 steps.
 
 - `schema` and `api` are objects that enrich what triage parsed. `schema.tables.<name>.cols` maps each column to its meaning, `idx` maps an index name (or its suffix) to what it serves, `refs` maps a referenced table to a note, and `api` maps `"METHOD /path"` to `{scope, emits, note}`. Give a column `null` to hide it.
-- `system` nodes sit on a grid (`col`, `row`) so that edges mostly run left to right. `status` is `new` or `changed`, and new edges animate. `kind` is person, service, api, db, queue or external.
+- `system` is laid out by the viewer. `col` is the swimlane a node belongs to (the `cols` headings: browser, API, services, a third party) and `row` only orders nodes inside a lane. Inside a lane, a node that fans out gets its callees one layer to the right, a one-to-one step between neighbouring rows stays stacked, long calls get their own track, and an edge back to an earlier lane (a reply, an email to the user) runs under the diagram. So write the real call graph, one edge per call from caller to callee, and never arrange boxes to dodge lines. `status` is `new` or `changed`, and new edges animate. `kind` is person, service, api, db, queue or external.
 - `decisions[].see` names a scenario and adds a "See it run" button.
 - `example` on any decision or watch item is a list of panels `{label, lang, code}`. See Examples below.
 - `model.ops.edges[i]` lists the transition indexes row `i` fires, lit on hover.

@@ -46,7 +46,7 @@ svg text { font-family: var(--sans); }
 .crumb { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
 .top h1 { font-size: 15px; font-weight: 650; flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pills { display: flex; gap: 6px; flex-wrap: wrap; }
-.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 560; background: var(--subtle); color: var(--muted); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 560; background: var(--subtle); color: var(--muted); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pill.plain::before { display: none; }
 .good { background: var(--success-soft); color: var(--success); }
@@ -98,9 +98,9 @@ section > header .hint { color: var(--muted); font-size: 13.5px; }
 
 /* connector canvas (system + schema) */
 .canvas-wrap { overflow-x: auto; }
-.canvas { position: relative; padding: 20px; }
+.canvas { position: relative; padding: 22px 30px; }
 .canvas > svg.links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 2; }
-.sys { display: grid; gap: 40px 60px; min-width: 1080px; position: relative; z-index: 1; }
+.sys { display: grid; gap: 46px 116px; position: relative; z-index: 1; }
 .colhead { justify-self: center; width: 100%; max-width: 250px; font-size: 11px; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding-bottom: 2px; }
 .node { width: 100%; max-width: 250px; justify-self: center; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 11px 13px; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; align-self: center; }
 .node.new { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
@@ -108,8 +108,8 @@ section > header .hint { color: var(--muted); font-size: 13.5px; }
 .node .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--subtle); color: var(--muted); }
 .node.new .ic { background: var(--accent-soft); color: var(--accent); }
 .node.changed .ic { background: var(--warning-soft); color: var(--warning); }
-.node b { display: block; font-size: 13.5px; font-weight: 650; line-height: 1.25; }
-.node small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; margin-top: 1px; }
+.node b { display: block; font-size: 13.5px; font-weight: 650; line-height: 1.25; overflow-wrap: break-word; }
+.node small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; margin-top: 1px; overflow-wrap: anywhere; }
 .node .tagnew { font: 700 9.5px var(--mono); letter-spacing: .06em; color: var(--accent); text-transform: uppercase; }
 .node.changed .tagnew { color: var(--warning); }
 .links path { fill: none; stroke: var(--line); stroke-width: 1.6; }
@@ -117,6 +117,8 @@ section > header .hint { color: var(--muted); font-size: 13.5px; }
 .links text { font-size: 11.5px; fill: var(--muted); }
 .links text.new { fill: var(--accent); font-weight: 600; }
 @keyframes flow { to { stroke-dashoffset: -13; } }
+.ghost { width: 100%; height: 2px; align-self: center; pointer-events: none; }
+.laneband { background: color-mix(in srgb, var(--subtle) 70%, transparent); border-radius: 14px; margin: -14px -18px; z-index: -1; }
 .legend-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 0 20px 16px; }
 .legend-row span { display: inline-flex; align-items: center; gap: 7px; }
 .legend-row i { display: inline-block; width: 22px; height: 12px; border-radius: 4px; border: 1.5px solid var(--border); }
@@ -129,6 +131,7 @@ section > header .hint { color: var(--muted); font-size: 13.5px; }
 .dec.agreed { border-color: color-mix(in srgb, var(--success) 50%, var(--border)); }
 .dec.asked { border-color: color-mix(in srgb, var(--warning) 60%, var(--border)); }
 .dec-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.dec-head .pill { flex-shrink: 0; }
 .dec h3 { font-size: 16px; font-weight: 680; line-height: 1.3; }
 .dec .why { margin: 0; color: var(--muted); font-size: 13.5px; }
 .vs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
@@ -555,23 +558,214 @@ function sHero() {
 function sSystem() {
   const s = DATA.system;
   if (!has(s) || !has(s.nodes)) return null;
-  const cols = Math.max(...s.nodes.map(n => n.col)) + 1;
-  const rows = Math.max(...s.nodes.map(n => n.row)) + 1;
-  const heads = (s.cols || []).map((c, i) => `<div class="colhead" style="grid-column:${i + 1};grid-row:1">${esc(c)}</div>`).join("");
-  const nodes = s.nodes.map(n => `<div class="node ${n.status || ""}" data-node="${esc(n.id)}" style="grid-column:${n.col + 1};grid-row:${n.row + 2}">
+  const g = layoutSystem(s);
+  const heads = g.lanes.map((l, i) => `<div class="colhead" style="grid-column:${l.from + 1} / ${l.to + 2};grid-row:1">${esc((s.cols || [])[l.lane] || "")}</div>`).join("");
+  const bands = g.lanes.map((l, i) => i % 2 ? `<div class="laneband" style="grid-column:${l.from + 1} / ${l.to + 2};grid-row:1 / ${g.rows + 2}"></div>` : "").join("");
+  const nodes = s.nodes.map(n => `<div class="node ${n.status || ""}" data-node="${esc(n.id)}" style="grid-column:${g.at[n.id].layer + 1};grid-row:${g.at[n.id].row + 2}">
       <span class="ic">${ICON[n.kind] || ICON.service}</span>
-      <span>${n.status && n.status !== "existing" ? `<span class="tagnew">${esc(n.status)}</span>` : ""}<b>${md(n.label)}</b>${n.sub ? `<small>${md(n.sub)}</small>` : ""}</span></div>`).join("");
+      <span>${n.status && n.status !== "existing" ? `<span class="tagnew">${esc(n.status)}</span>` : ""}<b>${md(n.label).replace(/_/g, "_<wbr>")}</b>${n.sub ? `<small>${md(n.sub)}</small>` : ""}</span></div>`).join("");
+  const ghosts = g.dummies.map(d => `<div class="ghost" data-node="${esc(d.id)}" style="grid-column:${d.layer + 1};grid-row:${d.row + 2}"></div>`).join("");
   onLayout(() => {
     const canvas = $("#sys-canvas"); if (!canvas) return;
-    const el = id => canvas.querySelector(`[data-node="${CSS.escape(id)}"]`);
-    const totals = {}; (s.edges || []).forEach(e => { const k = [e.from, e.to].sort().join("|"); totals[k] = (totals[k] || 0) + 1; });
-    drawLinks(canvas, "sys-links", (s.edges || []).map(e => ({ from: el(e.from), to: el(e.to), fromId: e.from, toId: e.to, label: e.label, status: e.status, pairTotal: totals[[e.from, e.to].sort().join("|")] })));
+    canvas.style.zoom = "";
+    routeSystem(canvas, s, g);
+    const wrap = canvas.parentElement, fit = wrap.clientWidth / canvas.scrollWidth;
+    if (fit < 1) canvas.style.zoom = String(Math.max(0.45, fit));
   });
   const body = `<div class="box"><div class="canvas-wrap"><div class="canvas" id="sys-canvas">
-      <div class="sys" style="grid-template-columns:repeat(${cols}, minmax(200px, 1fr));grid-template-rows:auto repeat(${rows}, auto)">${heads}${nodes}</div>
+      <div class="sys" style="grid-template-columns:repeat(${g.layers}, minmax(160px, 1fr));grid-template-rows:auto repeat(${g.rows}, auto);min-width:${g.layers * 160 + (g.layers - 1) * 116}px">${bands}${heads}${nodes}${ghosts}</div>
     </div></div>
     <div class="legend-row"><span><i class="new"></i>new in this change</span><span><i class="changed"></i>changed</span><span><i></i>already there</span><span><svg width="30" height="8"><path d="M0 4h30" stroke="var(--accent)" stroke-width="2" stroke-dasharray="7 6"/></svg>new path</span></div></div>`;
   return section("system", "At a glance", s.hint || "What is new, what it talks to, and what stays as it was.", body);
+}
+
+/* Layered layout. `col` is a swimlane; inside it every call steps one layer
+   right, long edges reserve empty cells, rows follow the callers to limit
+   crossings, and edges that point back to an earlier lane are drawn under the grid. */
+function layoutSystem(s) {
+  const nodes = s.nodes.map(n => ({ ...n, lane: n.col ?? 0, hint: n.row ?? 0 }));
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const edges = (s.edges || []).map((e, i) => ({ ...e, i })).filter(e => byId[e.from] && byId[e.to]);
+  const out = {}; edges.forEach(e => (out[e.from] ||= []).push(e));
+  const state = {};
+  const visit = id => {
+    state[id] = 1;
+    for (const e of out[id] || []) {
+      if (byId[e.to].lane < byId[id].lane || state[e.to] === 1 || e.from === e.to) { e.back = true; continue; }
+      if (!state[e.to]) visit(e.to);
+    }
+    state[id] = 2;
+  };
+  [...nodes].sort((a, b) => a.lane - b.lane || a.hint - b.hint).forEach(n => { if (!state[n.id]) visit(n.id); });
+
+  const intraOut = {}, intraIn = {};
+  edges.forEach(e => { if (!e.back && byId[e.from].lane === byId[e.to].lane) { intraOut[e.from] = (intraOut[e.from] || 0) + 1; intraIn[e.to] = (intraIn[e.to] || 0) + 1; } });
+  edges.forEach(e => {
+    e.stacked = !e.back && byId[e.from].lane === byId[e.to].lane && Math.abs(byId[e.from].hint - byId[e.to].hint) === 1
+      && intraOut[e.from] === 1 && intraIn[e.to] === 1;
+  });
+  const laneIds = [...new Set(nodes.map(n => n.lane))].sort((a, b) => a - b);
+  const layer = {}, lanes = []; let start = 0;
+  for (const l of laneIds) {
+    const members = nodes.filter(n => n.lane === l);
+    members.forEach(n => layer[n.id] = start);
+    for (let pass = 0; pass <= members.length; pass++) {
+      let moved = false;
+      edges.forEach(e => {
+        if (e.back || byId[e.to].lane !== l || byId[e.from].lane !== l) return;
+        const need = layer[e.from] + (e.stacked ? 0 : 1);
+        if (layer[e.to] < need) { layer[e.to] = need; moved = true; }
+      });
+      if (!moved) break;
+    }
+    const end = Math.max(...members.map(n => layer[n.id]));
+    lanes.push({ lane: l, from: start, to: end }); start = end + 1;
+  }
+  const layers = start;
+
+  const cells = Array.from({ length: layers }, () => []);
+  nodes.forEach(n => cells[layer[n.id]].push({ id: n.id, hint: n.hint }));
+  const chain = {}, dummies = [];
+  edges.forEach(e => {
+    if (e.back || e.stacked) return;
+    chain[e.i] = [];
+    for (let L = layer[e.from] + 1; L < layer[e.to]; L++) {
+      const id = `~${e.i}-${L}`; chain[e.i].push(id);
+      cells[L].push({ id, hint: (byId[e.from].hint + byId[e.to].hint) / 2 - 0.01, dummy: true });
+    }
+  });
+  const segs = [];
+  edges.forEach(e => { if (e.back || e.stacked) return; const path = [e.from, ...chain[e.i], e.to]; for (let k = 1; k < path.length; k++) segs.push([path[k - 1], path[k]]); });
+  cells.forEach(c => c.sort((x, y) => x.hint - y.hint));
+  const pos = {}; const index = () => cells.forEach(c => c.forEach((x, i) => pos[x.id] = i));
+  index();
+  for (let sweep = 0; sweep < 8; sweep++) {
+    const down = sweep % 2 === 0;
+    const order = down ? cells.map((_, i) => i).slice(1) : cells.map((_, i) => i).reverse().slice(1);
+    order.forEach(L => {
+      cells[L].forEach(x => {
+        const nb = segs.filter(([u, v]) => down ? v === x.id : u === x.id).map(([u, v]) => pos[down ? u : v]);
+        x.bc = nb.length ? nb.reduce((a, b) => a + b, 0) / nb.length : pos[x.id];
+      });
+      cells[L].sort((x, y) => x.bc - y.bc || x.hint - y.hint);
+      cells[L].forEach((x, i) => pos[x.id] = i);
+    });
+  }
+  const row = {};
+  cells.forEach(c => {
+    let next = 0;
+    c.forEach(x => {
+      const preds = segs.filter(([u, v]) => v === x.id).map(([u]) => row[u]).filter(r => r !== undefined);
+      const want = preds.length ? Math.round(preds.reduce((a, b) => a + b, 0) / preds.length) : next;
+      row[x.id] = Math.max(want, next); next = row[x.id] + 1;
+    });
+  });
+  for (let L = cells.length - 2; L >= 0; L--) {
+    let prev = -1;
+    cells[L].forEach(x => {
+      const succ = segs.filter(([u]) => u === x.id).map(([, v]) => row[v]);
+      const want = succ.length ? Math.round(succ.reduce((a, b) => a + b, 0) / succ.length) : row[x.id];
+      row[x.id] = Math.max(want, prev + 1); prev = row[x.id];
+    });
+  }
+  const taken = (L, r, self) => cells[L].some(x => x.id !== self && row[x.id] === r);
+  for (let pass = 0; pass < 3; pass++) edges.forEach(e => {
+    if (!e.stacked) return;
+    const L = layer[e.from], above = byId[e.from].hint < byId[e.to].hint;
+    const [u, v] = above ? [e.from, e.to] : [e.to, e.from];
+    if (row[v] - row[u] > 1 && !taken(L, row[v] - 1, u)) row[u] = row[v] - 1;
+  });
+  const top = Math.min(...Object.values(row));
+  Object.keys(row).forEach(k => row[k] -= top);
+  const at = {}; nodes.forEach(n => at[n.id] = { layer: layer[n.id], row: row[n.id] });
+  cells.forEach((c, L) => c.forEach(x => { if (x.dummy) dummies.push({ id: x.id, layer: L, row: row[x.id] }); }));
+  const rows = Math.max(1, ...Object.values(row).map(r => r + 1));
+  return { at, layers, rows, lanes, dummies, chain, back: new Set(edges.filter(e => e.back).map(e => e.i)), stacked: new Set(edges.filter(e => e.stacked).map(e => e.i)) };
+}
+
+function routeSystem(canvas, s, g) {
+  let svg = canvas.querySelector("svg.sys-links");
+  if (!svg) { svg = svgEl("svg", { class: "links sys-links" }); canvas.prepend(svg); }
+  svg.innerHTML = "";
+  const base = canvas.getBoundingClientRect();
+  const box = id => {
+    const el = canvas.querySelector(`[data-node="${CSS.escape(id)}"]`); if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { l: r.left - base.left, r: r.right - base.left, t: r.top - base.top, b: r.bottom - base.top, cy: (r.top + r.bottom) / 2 - base.top, cx: (r.left + r.right) / 2 - base.left };
+  };
+  const boxes = Object.fromEntries(s.nodes.map(n => [n.id, box(n.id)]));
+  const floor = Math.max(...Object.values(boxes).filter(Boolean).map(b => b.b)) + 32;
+  const below = id => s.nodes.some(n => n.id !== id && g.at[n.id].layer === g.at[id].layer && g.at[n.id].row > g.at[id].row);
+  const used = {}; const lane = k => (used[k] = (used[k] ?? -1) + 1);
+  const smooth = pts => {
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i];
+      if (py === y) d += ` L${x},${y}`;
+      else { const c = px + Math.min(56, (x - px) * 0.45); d += ` C${c},${py} ${c},${y} ${x},${y}`; }
+    }
+    return d;
+  };
+  const ortho = pts => {
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const r1 = Math.min(12, Math.hypot(x - px, y - py) / 2), r2 = Math.min(12, Math.hypot(nx - x, ny - y) / 2);
+      d += ` L${x - Math.sign(x - px) * r1},${y - Math.sign(y - py) * r1} Q${x},${y} ${x + Math.sign(nx - x) * r2},${y + Math.sign(ny - y) * r2}`;
+    }
+    const [lx, ly] = pts[pts.length - 1];
+    return d + ` L${lx},${ly}`;
+  };
+  const label = (x, y, text, cls) => {
+    if (!text) return;
+    const lines = [];
+    String(text).split(" ").forEach(w => { const last = lines[lines.length - 1]; if (last && (last + " " + w).length <= 18) lines[lines.length - 1] = last + " " + w; else lines.push(w); });
+    const t = svgEl("text", { x, y: y - (lines.length - 1) * 13, "text-anchor": "middle", class: `halo ${cls}` }, svg);
+    lines.forEach((ln, i) => { const sp = svgEl("tspan", { x, dy: i ? 13 : 0 }, t); sp.textContent = ln; });
+  };
+  const fanOut = {}, fanIn = {};
+  const firstHop = i => { const c = g.chain[i] || []; return c.length ? box(c[0]) : boxes[s.edges[i].to]; };
+  const lastHop = i => { const c = g.chain[i] || []; return c.length ? box(c[c.length - 1]) : boxes[s.edges[i].from]; };
+  (s.edges || []).forEach((e, i) => { if (g.back.has(i) || g.stacked.has(i) || !boxes[e.from] || !boxes[e.to]) return; (fanOut[e.from] ||= []).push(i); (fanIn[e.to] ||= []).push(i); });
+  Object.values(fanOut).forEach(list => list.sort((x, y) => firstHop(x).cy - firstHop(y).cy));
+  Object.values(fanIn).forEach(list => list.sort((x, y) => lastHop(x).cy - lastHop(y).cy));
+  (s.edges || []).forEach((e, i) => {
+    const a = boxes[e.from], b = boxes[e.to]; if (!a || !b) return;
+    const cls = e.status === "new" ? "new" : "";
+    let d, lx, ly;
+    if (g.stacked.has(i)) {
+      const down = b.t > a.t, y1 = down ? a.b : a.t, y2 = down ? b.t - 3 : b.b + 3;
+      d = `M${a.cx},${y1} L${a.cx},${y2}`; lx = a.cx + 10; ly = (y1 + y2) / 2 + 4;
+      svgEl("path", { d, class: cls, "marker-end": `url(#sys-links-ah${cls ? "-new" : ""})` }, svg);
+      if (e.label) { const t = svgEl("text", { x: lx, y: ly, "text-anchor": "start", class: `halo ${cls}` }, svg); t.textContent = e.label; }
+      return;
+    }
+    if (g.back.has(i)) {
+      const y = floor + lane("floor") * 16;
+      const start = below(e.from) ? [[a.l, a.cy], [a.l - 18, a.cy], [a.l - 18, y]] : [[a.cx, a.b], [a.cx, y]];
+      const end = below(e.to) ? [[b.r + 18, y], [b.r + 18, b.cy], [b.r + 3, b.cy]] : [[b.cx, y], [b.cx, b.b + 3]];
+      d = ortho([...start, ...end]); lx = (start[start.length - 1][0] + end[0][0]) / 2; ly = y - 7;
+    } else {
+      const outs = fanOut[e.from], k = outs.indexOf(i), step = Math.min(14, (a.b - a.t - 16) / Math.max(1, outs.length));
+      const ins = fanIn[e.to], j = ins.indexOf(i), stepIn = Math.min(14, (b.b - b.t - 16) / Math.max(1, ins.length));
+      const y0 = a.cy + (k - (outs.length - 1) / 2) * step, yEnd = b.cy + (j - (ins.length - 1) / 2) * stepIn;
+      const pts = [[a.r, y0]];
+      (g.chain[i] || []).forEach(id => { const m = box(id); if (m) pts.push([m.l, m.cy], [m.r, m.cy]); });
+      pts.push([b.l - 3, yEnd]);
+      d = smooth(pts);
+      const [x1] = pts[pts.length - 2], [x2, y2] = pts[pts.length - 1];
+      lx = (x1 + x2) / 2 + 12; ly = y2 - 7;
+    }
+    svgEl("path", { d, class: cls, "marker-end": `url(#sys-links-ah${cls ? "-new" : ""})` }, svg);
+    label(lx, ly, e.label, cls);
+  });
+  const want = `${20 + (used.floor !== undefined ? 34 + used.floor * 16 + 14 : 0)}px`;
+  if (canvas.style.paddingBottom !== want) canvas.style.paddingBottom = want;
+  const defs = svgEl("defs", {}, svg);
+  [["", "var(--line)"], ["-new", "var(--accent)"]].forEach(([sfx, c]) => {
+    const m = svgEl("marker", { id: `sys-links-ah${sfx}`, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: c, stroke: "none" }, m);
+  });
 }
 
 /* ---------- examples ---------- */
