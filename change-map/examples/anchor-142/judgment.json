@@ -36,6 +36,18 @@
     "apps/anchor/migrations/000039_organization_invitations.up.sql:7",
     "apps/anchor/internal/domain/organizationinvitation/invitation.go:37",
     "apps/anchor/internal/invitation/repository/repository.go:106"
+   ],
+   "example": [
+    {
+     "label": "Row in Postgres",
+     "lang": "sql",
+     "code": "SELECT email, accepted_at, expires_at\nFROM organization_invitations WHERE id = 'oinv_2Kx9';\n\n-- ana@acme.io | NULL | 2026-09-28 09:00+00\n-- no status column: the clock has passed expires_at"
+    },
+    {
+     "label": "GET the invitation",
+     "lang": "http",
+     "code": "GET /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"expired\",\n  \"expires_at\": \"2026-09-28T09:00:00Z\",\n  \"accepted_at\": null\n}"
+    }
    ]
   },
   {
@@ -51,7 +63,19 @@
     "apps/anchor/internal/invitation/repository/repository.go:132",
     "apps/anchor/internal/invitation/service/service.go:405"
    ],
-   "see": "race"
+   "see": "race",
+   "example": [
+    {
+     "label": "First statement of every write",
+     "lang": "sql",
+     "code": "BEGIN;\nSELECT * FROM organizations\nWHERE id = 'org_acme' AND product_id = 'prod_ep'\nFOR NO KEY UPDATE;   -- request B waits here\n-- then: pending for bob? member with that email? insert\nCOMMIT;"
+    },
+    {
+     "label": "Two creates at the same instant",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"bob@acme.io\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{\n  \"errors\": [\n    {\n      \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\",\n      \"message\": \"A pending invitation already exists for this email address in this organization.\"\n    }\n  ]\n}"
+    }
+   ]
   },
   {
    "id": "token-hash",
@@ -66,7 +90,19 @@
     "apps/anchor/migrations/000039_organization_invitations.up.sql:23",
     "apps/anchor/internal/invitation/service/service.go:351"
    ],
-   "see": "resend"
+   "see": "resend",
+   "example": [
+    {
+     "label": "POST create · the only time the token appears",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"ana@acme.io\", \"role_id\": \"role_member\" }\n\n201\n{\n  \"id\": \"oinv_2Kx9\",\n  \"email\": \"ana@acme.io\",\n  \"status\": \"pending\",\n  \"token\": \"anchor_inv_7HkQ2mNOP1234567890abc\"\n}"
+    },
+    {
+     "label": "What Postgres keeps",
+     "lang": "sql",
+     "code": "SELECT token_hash FROM organization_invitations\nWHERE id = 'oinv_2Kx9';\n\n-- 9f2c…e41b   (SHA-256, the token itself is gone)"
+    }
+   ]
   },
   {
    "id": "no-email",
@@ -79,7 +115,19 @@
    "refs": [
     "apps/anchor/internal/invitation/service/service.go:21"
    ],
-   "see": "invite"
+   "see": "invite",
+   "example": [
+    {
+     "label": "Anchor hands the token back",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n\n201\n{ \"id\": \"oinv_2Kx9\", \"token\": \"anchor_inv_7Hk…\" }"
+    },
+    {
+     "label": "The Product builds and sends the email",
+     "lang": "text",
+     "code": "To: ana@acme.io\nSubject: Acme invited you to EchoPoint\n\nAccept: https://app.echopoint.dev/invite#anchor_inv_7Hk…\n\n(the Product owns the template, sender and accept page)"
+    }
+   ]
   },
   {
    "id": "token-bearer",
@@ -92,7 +140,19 @@
    "refs": [
     "apps/anchor/internal/invitation/service/service.go:285"
    ],
-   "see": "invite"
+   "see": "invite",
+   "example": [
+    {
+     "label": "Invited ana@acme.io, accepted by Bob",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/invitations/accept\n{\n  \"token\": \"anchor_inv_7Hk\\u2026\",\n  \"product_user_id\": \"pu_bob\"\n}\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"accepted\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": \"2026-09-30T14:02:00Z\"\n}"
+    },
+    {
+     "label": "Who joined",
+     "lang": "text",
+     "code": "Acme members\n  pu_bob  bob@gmail.com  role_member   ← not ana@acme.io\n\nAnchor never compares the two emails.\nThe Product decides who may accept."
+    }
+   ]
   },
   {
    "id": "token-body",
@@ -106,7 +166,19 @@
     "apps/anchor/cmd/http/openapi.yaml:6728",
     "apps/anchor/internal/api/organization_invitation_api.go:152"
    ],
-   "see": "invite"
+   "see": "invite",
+   "example": [
+    {
+     "label": "Lookup, token in the body",
+     "lang": "http",
+     "code": "POST /v1/products/prod_ep/invitations/lookup\n{ \"token\": \"anchor_inv_7Hk…\" }\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"pending\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": null\n}"
+    },
+    {
+     "label": "Response · 400",
+     "lang": "http",
+     "code": "400\n\n{\n  \"errors\": [\n    {\n      \"code\": \"ORGANIZATION_INVITATION_TOKEN_NOT_FOUND\",\n      \"message\": \"This product has no invitation with that token.\"\n    }\n  ]\n}"
+    }
+   ]
   },
   {
    "id": "reuse-addmember",
@@ -120,7 +192,14 @@
     "apps/anchor/internal/invitation/service/service.go:318",
     "apps/anchor/internal/invitation/service/service.go:328"
    ],
-   "see": "invite"
+   "see": "invite",
+   "example": [
+    {
+     "label": "Accept emits two events in one transaction",
+     "lang": "json",
+     "code": "[\n  {\n    \"type\": \"organization.invitation.accepted\",\n    \"timestamp\": \"2026-09-30T14:02:00Z\",\n    \"data\": {\n      \"organization_id\": \"org_acme\",\n      \"invitation_id\": \"oinv_2Kx9\",\n      \"product_user_id\": \"pu_ana\"\n    }\n  },\n  {\n    \"type\": \"organization.membership.created\",\n    \"timestamp\": \"2026-09-30T14:02:00Z\",\n    \"data\": {\n      \"organization_id\": \"org_acme\",\n      \"product_user_id\": \"pu_ana\"\n    }\n  }\n]"
+    }
+   ]
   }
  ],
  "model": {
@@ -366,33 +445,68 @@
    "sev": "question",
    "title": "Delete works on accepted and expired invitations",
    "body": "Delete has no status check. Deleting an accepted invitation removes its history and emits `organization.invitation.deleted` for something that is already a membership. Is that intended?",
-   "ref": "apps/anchor/internal/invitation/service/service.go:205"
+   "ref": "apps/anchor/internal/invitation/service/service.go:205",
+   "example": [
+    {
+     "label": "Deleting an invitation Ana already accepted",
+     "lang": "http",
+     "code": "DELETE /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9      (status: accepted)\n\n204\n\nevent → organization.invitation.deleted\n        Ana stays a member"
+    }
+   ]
   },
   {
    "id": "resend-expiry",
    "sev": "question",
    "title": "Resend replaces a custom expiry with the 7-day default",
    "body": "Resend sets `expires_at` to now + 7 days. An expiry that was set on create or update is lost.",
-   "ref": "apps/anchor/internal/invitation/service/service.go:226"
+   "ref": "apps/anchor/internal/invitation/service/service.go:226",
+   "example": [
+    {
+     "label": "The admin set 30 days, resend brings back 7",
+     "lang": "http",
+     "code": "PUT /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n{ \"role_id\": \"role_member\", \"expires_at\": \"2026-10-30T09:00:00Z\" }\n→ expires_at 2026-10-30\n\nPOST /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9/resend\n→ expires_at 2026-10-07   (now + 7 days)"
+    }
+   ]
   },
   {
    "id": "role-cascade",
    "sev": "risk",
    "title": "Deleting a role deletes its invitations with no event",
    "body": "`product_role_id` cascades. A Product that mirrors invitations from events keeps entries that no longer exist. The PR notes this matches how memberships behave.",
-   "ref": "apps/anchor/migrations/000039_organization_invitations.up.sql:22"
+   "ref": "apps/anchor/migrations/000039_organization_invitations.up.sql:22",
+   "example": [
+    {
+     "label": "Delete a role",
+     "lang": "sql",
+     "code": "DELETE FROM product_roles WHERE id = 'role_member';\n-- ON DELETE CASCADE removes every invitation with that role\n-- no organization.invitation.deleted event is emitted"
+    }
+   ]
   },
   {
    "id": "endpoint-optin",
    "sev": "note",
    "title": "Existing event endpoints will not receive the new events",
-   "body": "An endpoint stores an explicit list of event types. Each Product has to add the four invitation types to its endpoint config."
+   "body": "An endpoint stores an explicit list of event types. Each Product has to add the four invitation types to its endpoint config.",
+   "example": [
+    {
+     "label": "An existing endpoint config",
+     "lang": "json",
+     "code": "{\n  \"url\": \"https://echopoint.dev/hooks/anchor\",\n  \"event_types\": [\n    \"organization.created\",\n    \"organization.membership.created\",\n    \"organization.membership.deleted\"\n  ]\n}\n\n// add organization.invitation.* or nothing arrives"
+    }
+   ]
   },
   {
    "id": "validate-wrapper",
    "sev": "nit",
    "title": "`validateStruct` wraps the framework call and adds nothing",
-   "ref": "apps/anchor/internal/invitation/service/validate.go:5"
+   "ref": "apps/anchor/internal/invitation/service/validate.go:5",
+   "example": [
+    {
+     "label": "validate.go",
+     "lang": "go",
+     "code": "func validateStruct(input any) error {\n\tif err := frameworkvalidate.ValidateStruct(input); err != nil {\n\t\treturn err\n\t}\n\treturn nil\n}"
+    }
+   ]
   }
  ],
  "apiHint": "New permission domain `organization_invitation`. Scopes below drop that prefix.",
