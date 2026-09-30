@@ -27,3 +27,6 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
   rather than a chain, reusing organization and flow variables instead of
   hardcoding, verifying side effects at the third party, and keeping assertions
   in step with a status change.
+- [`change-map`](change-map/SKILL.md) — turn a PR or in-progress branch into an
+  picture-first review page: system diagram, decisions to approve, animated
+  scenarios, lifecycle, ER schema, tests as Given/When/Then, and the noise split.
