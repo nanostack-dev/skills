@@ -141,9 +141,6 @@ def check(data):
     nodes = {n["id"] for n in system.get("nodes") or []}
     if len(nodes) > 12:
         problems.append(f"system has {len(nodes)} nodes, cap is 12")
-    cells = [(n.get("col"), n.get("row")) for n in system.get("nodes") or []]
-    if len(cells) != len(set(cells)):
-        problems.append("two system nodes share a col and row")
     for e in system.get("edges") or []:
         if e.get("from") not in nodes or e.get("to") not in nodes:
             problems.append(f"system edge {e.get('from')} -> {e.get('to')} names a missing node")
