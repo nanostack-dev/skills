@@ -96,7 +96,7 @@ cost is diagnosis:
 One real failure in a chain of eight hides the other seven. From a real run of a products flow:
 
 ```
-Node Create 1-char Name (400) failed: assertion 0 failed: statusCode equals expected=400 actual=409
+Node Create 1-char Name (400) failed: assertion 0 failed: status_code equals expected=400 actual=409
 Node Search Products      failed: Skipped because step "Create 1-char Name (400)" failed earlier
 Node Update Empty Name    failed: Skipped ...
 Node Update Product       failed: Skipped ...
@@ -323,7 +323,7 @@ echopoint flows node expect add <flow> events --name "No accept after delete" --
   --match '$.data.invitation_id equals {{create-c.id}}'
 
 echopoint flows node assertion add <flow> events --extractor header --header-name webhook-signature \
-  --operator startsWith --value "v1,"
+  --operator starts_with --value "v1,"
 ```
 
 Rules that make this a real test:
@@ -337,7 +337,11 @@ Rules that make this a real test:
 - **Prove what must not happen** with `--never` or `--once`, and give the wait a `--settle` window
   (a few seconds) so a late extra event is still seen.
 - **The node's own assertions run on every claimed event**: the signature header, and that no
-  secret leaks (`--extractor body --operator notContains --value <token prefix>`).
+  secret leaks (`--extractor body --operator not_contains --value <token prefix>`).
+- **A check on the request URL** reads a query param: `--match 'query:q equals x'`, or
+  `--extractor query_param --param-name q` on the node's assertions.
+- **Extractor and operator names are snake_case** (`json_path`, `status_code`, `not_contains`,
+  `greater_than_or_equal`). A camelCase name is rejected.
 - **`--run-when always`**, with an edge from every trigger branch. A branch that failed then
   leaves only its own expected events `not evaluated`; the rest are still judged.
 - Read a failure from the node result: each expected event has a verdict, and one that found
@@ -365,7 +369,7 @@ flow suite — often after the service is already deployed.
 
 In the same change that moves a status:
 
-1. Find the `statusCode` assertions on the affected route, in every organization the suite lives in.
+1. Find the `status_code` assertions on the affected route, in every organization the suite lives in.
 2. Update the assertion **and** the node's display name — names carry the status, so a node reading
    `Duplicate Slug (400)` becomes `Duplicate Slug (409)`.
 3. Re-run the tag everywhere.
