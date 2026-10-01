@@ -110,7 +110,11 @@ Eight nodes, one genuine result, seven unknowns — and the cleanup never ran, s
 fixtures. Those seven cases are independent: none reads an output of `Create 1-char Name`. Hung off
 `setup` instead, that run would have reported all eight verdicts at once and still cleaned up.
 
-Chains turn each run into one bit of information. Branches give you the whole feature per run.
+Chains turn each run into one bit of information. Branches give you the whole feature per run: a
+failure skips only the nodes downstream of it (`dependency_failed`, naming the failed step), and
+every other branch still runs to its verdict (runner v0.63+). Before that, the first failure skipped
+every node that had not started, which is why older flows wire known-bug checks last; that ordering
+is no longer needed.
 
 ### The shape to reach for
 
@@ -130,7 +134,12 @@ Chains turn each run into one bit of information. Branches give you the whole fe
   `get → update → delete → verify-gone` is a real sequence, because each reads the last one's
   effect. That is one branch, not four.
 - **Cleanup fans in.** Give it `--run-when always` and an edge from every branch, so it runs even
-  when a branch fails and the run does not leak fixtures.
+  when a branch fails and the run does not leak fixtures. It runs whenever the ids it references
+  exist: a create node that fails an assertion still hands its outputs on, so
+  `DELETE /widgets/{{create-widget.widgetId}}` still fires. Only a create that got no id back skips
+  its cleanup.
+- **A check may follow cleanup.** `delete (always) → verify-gone (404)` works: an on_success node
+  after an always node runs in the always phase once its predecessors succeeded.
 
 ### The test for "chain or branch?"
 
@@ -376,6 +385,11 @@ JSON. `flows update --file` takes an `UpdateFlowRequest` and merges field by fie
   with its assertion is how a stale suite hides.
 - Any node can read any upstream node's output — `{{nodeId.key}}` reaches across branches, so a
   fan-out costs nothing in wiring.
+- **Assertion values take templates too**: `$.id equals {{create-product.productId}}` checks the
+  read-back returns the resource this run created, not just a 200 (runner v0.62+). Prefer it over
+  prefix or name matching. A reference no upstream node produces is rejected by `flows validate`.
+- Tags are at most 20 characters and an organization holds at most 100 distinct tags, so a per-run
+  tag (`epsched-{{$runId}}`) must be deleted with its fixture.
 - Modules are reusable sub-flows and nest several levels: a child exports with
   `--output name=childNode.key` and the parent reads `{{moduleNode.name}}`. Give a module a name
   that marks it as one, and keep it out of suite runs — it owns no cleanup of its own.
@@ -387,6 +401,12 @@ Read the node line, not the flow line: a flow reports its first failure and mark
 downstream `Skipped`, so the real cause is the one node with an `assertion N failed` message.
 `expected=X actual=Y` tells you which side moved. Decide which is wrong — the service or the
 assertion — and fix that one. Never relax an assertion to make a run green.
+
+When the service is wrong and the fix is not shipping with this change, do not leave the node red in
+a suite that gates a deploy, and do not weaken it. Move the reproduction into a
+`<product>: known bugs` flow tagged `known-bugs`, which no CI tag selects, and say in its description
+which flow the check returns to once the fix lands. The bug stays recorded; the deploy gate stays
+meaningful.
 
 If the `Skipped` list is long, that is the flow telling you it is a chain. Fixing the shape is
 usually worth more than fixing the one node, because the next failure will hide the same seven cases
