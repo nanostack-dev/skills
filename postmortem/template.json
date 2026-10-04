@@ -1,0 +1,73 @@
+{
+  "title": "One sentence: what broke and the mechanism, e.g. Prod deploy rolled back: migration outran the start timeout",
+  "short": "Two to four words for the page title",
+  "service": "echopoint",
+  "date": "2026-10-01",
+  "severity": "SEV2",
+  "status": "draft",
+  "authors": ["Team or role"],
+  "summary": "Four to six sentences: what happened, to whom, for how long, how it was fixed, what changes now.",
+  "impact": {
+    "text": "What customers and the business saw. Numbers over adjectives.",
+    "numbers": [
+      {"value": "47 min", "label": "of failed checkouts"},
+      {"value": "1,240", "label": "requests answered 503"}
+    ]
+  },
+  "trigger": "The event that started the impact.",
+  "detection": "How and when the team found out, and why not sooner.",
+  "resolution": "What stopped the impact, then what fixed it.",
+  "timeline": {
+    "events": [
+      {"t": "2026-10-01T14:02:00Z", "kind": "change", "label": "Deploy of a1b2c3d starts", "link": "https://github.com/org/repo/actions/runs/1"},
+      {"t": "2026-10-01T14:05:10Z", "kind": "trigger", "label": "Error rate on /checkout passes 20%", "detail": "Optional sentence or two. `code` and [links](https://example.com) work."},
+      {"t": "2026-10-01T14:12:00Z", "kind": "detect", "label": "Error-rate alert pages on-call"},
+      {"t": "2026-10-01T14:20:00Z", "approx": true, "kind": "mitigate", "label": "Traffic shifted back to the old version"},
+      {"t": "2026-10-01T14:52:00Z", "kind": "resolve", "label": "Error rate back under 0.1%"},
+      {"t": "2026-10-02T09:00:00Z", "kind": "followup", "label": "Fix merged"}
+    ],
+    "metric": {"label": "Error rate", "unit": "%", "points": [["2026-10-01T14:00:00Z", 0.1], ["2026-10-01T14:10:00Z", 22], ["2026-10-01T14:25:00Z", 4], ["2026-10-01T14:55:00Z", 0.1]]}
+  },
+  "whys": {
+    "problem": "The impact a customer saw, the top of the tree",
+    "because": [
+      {
+        "text": "First answer to why. Under 140 characters.",
+        "evidence": "Where this is shown: a log line, a graph, a [link](https://example.com)",
+        "because": [
+          {"text": "Next answer", "because": [
+            {"text": "Next answer", "because": [
+              {"id": "R1", "root": true, "text": "Root cause: something the team can change that removes the whole class"}
+            ]}
+          ]},
+          {"text": "A second cause of the same answer, its own branch", "open": true}
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Why it was this bad: detection, blast radius or recovery",
+        "because": [
+          {"text": "Next answer", "because": [
+            {"id": "R2", "root": true, "text": "Root cause of the size of the impact"}
+          ]}
+        ]
+      }
+    ]
+  },
+  "contributing": ["A condition that made it worse without causing it."],
+  "lessons": {
+    "well": ["What worked and should be kept."],
+    "wrong": ["What failed or slowed the response."],
+    "lucky": ["What saved us that we cannot count on next time."]
+  },
+  "actions": [
+    {"id": "A1", "what": "One concrete change", "type": "prevent", "owner": "team or person", "due": "2026-10-15", "status": "open", "ticket": {"label": "repo#123", "url": "https://github.com/org/repo/issues/123"}, "fixes": ["R1"]},
+    {"id": "A2", "what": "Alert on X before customers see it", "type": "detect", "owner": "team", "due": "2026-10-15", "status": "open", "fixes": ["R2"]}
+  ],
+  "responders": [{"role": "Incident lead", "name": "Name or role"}],
+  "messaging": {
+    "internal": "The update posted to the team.",
+    "external": "The update sent to customers, if any."
+  },
+  "links": [{"label": "Incident channel", "url": "https://example.com"}]
+}
