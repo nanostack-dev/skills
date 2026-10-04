@@ -192,7 +192,7 @@ section > header .spacer { flex: 1; }
 #whys-diagram .node.open rect { fill: var(--warn-soft) !important; stroke: var(--warn) !important; }
 #whys-diagram .node.hl rect { stroke-width: 3px !important; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--good) 55%, transparent)); }
 .growing g.node { animation: fade .5s ease-out backwards; animation-delay: var(--d); }
-.growing g.node > rect { transform-box: fill-box; transform-origin: center; animation: nodepop .5s cubic-bezier(.2,.8,.2,1.2) backwards; animation-delay: var(--d); }
+.growing g.node > rect { transform-box: fill-box; transform-origin: center; animation: nodepop .5s cubic-bezier(.25,1,.5,1) backwards; animation-delay: var(--d); }
 .growing .flowchart-link:not(.edge-pattern-dotted) { stroke-dasharray: 1; animation: draw .4s ease-in-out backwards; animation-delay: var(--d); }
 .growing .flowchart-link.edge-pattern-dotted { animation: fade .4s ease-out backwards; animation-delay: var(--d); }
 #whys-diagram .flowchart-link.edge-pattern-dotted { stroke: var(--warn) !important; stroke-dasharray: 5 4; }
