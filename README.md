@@ -30,3 +30,7 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
 - [`change-map`](change-map/SKILL.md) — turn a PR or in-progress branch into an
   picture-first review page: system diagram, decisions to approve, animated
   scenarios, lifecycle, ER schema, tests as Given/When/Then, and the noise split.
+- [`postmortem`](postmortem/SKILL.md) — blameless postmortem for an incident:
+  evidence-backed timeline, a branching Five Whys tree in Mermaid, an owned
+  action per root cause, published as an animated HTML report plus a Markdown
+  document.
