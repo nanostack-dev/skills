@@ -140,6 +140,13 @@ is no longer needed.
   its cleanup.
 - **A check may follow cleanup.** `delete (always) → verify-gone (404)` works: an on_success node
   after an always node runs in the always phase once its predecessors succeeded.
+- **Withdraw what outlives its owner before deleting the owner.** A public projection (a published
+  page, a shared link) can stay readable after its organization is deleted, so the cleanup chain
+  unpublishes first (`--run-when always`, accepting the "already withdrawn" status too) and deletes
+  the organization after it.
+- **A replay needs the same key in two nodes.** To prove an idempotency key (`command_id`,
+  `Idempotency-Key`) replays, send a value both nodes read from one upstream output, such as the
+  UUID id of a resource this run created: `{{push-major.id}}` in the first request and its retry.
 
 ### The test for "chain or branch?"
 
