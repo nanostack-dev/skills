@@ -74,7 +74,9 @@ list means the shape is wrong, not the node — fix the shape first.
 
 **7. Run it twice in a row.** A flow that passes once and fails the second time did not clean up
 after itself, and it will fail for the next person instead. This is the check that catches a fixed
-literal where a generated value belonged.
+literal where a generated value belonged. Two greens prove cleanup, not ordering: run a new or
+reshaped branchy flow three times before it joins a CI tag, since a race between siblings depends
+on which request lands first.
 
 **8. Tag it, and mirror it wherever the suite lives.** A flow nothing selects is a flow nobody runs.
 
@@ -154,6 +156,10 @@ Ask of any two nodes: **does B read an output of A, or observe state that A chan
 
 - Yes → chain them. `verify-gone` must follow `delete`.
 - No → they are siblings. Hang both off the common ancestor.
+- **A count reads every write in its scope.** A node asserting a total or an empty list
+  (`$.total equals 0`) observes every node that creates in that scope, so it runs before all of
+  them, including a branch added later for an unrelated case
+  ([postmortem](../docs/postmortems/2026-10-05-specs-flow-count-race.md)).
 
 Negative cases are the easiest call: they assert a 4xx and change nothing, so they can essentially
 always be siblings. Five validation cases in a row are five branches.
