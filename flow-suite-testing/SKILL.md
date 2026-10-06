@@ -160,6 +160,11 @@ Ask of any two nodes: **does B read an output of A, or observe state that A chan
   (`$.total equals 0`) observes every node that creates in that scope, so it runs before all of
   them, including a branch added later for an unrelated case
   ([postmortem](../docs/postmortems/2026-10-05-specs-flow-count-race.md)).
+- **A read of a projection polls.** Search results, usage totals and other views that a background
+  job builds after the write commits lag the write by a moment, so a node asserting on them right
+  after the create races that job. Wait through a `poll` node: one poll until the new resource
+  appears, then plain assertion nodes after it
+  ([postmortem](../docs/postmortems/2026-10-06-specs-search-indexing-race.md)).
 
 Negative cases are the easiest call: they assert a 4xx and change nothing, so they can essentially
 always be siblings. Five validation cases in a row are five branches.
@@ -410,6 +415,11 @@ JSON. `flows update --file` takes an `UpdateFlowRequest` and merges field by fie
 - Modules are reusable sub-flows and nest several levels: a child exports with
   `--output name=childNode.key` and the parent reads `{{moduleNode.name}}`. Give a module a name
   that marks it as one, and keep it out of suite runs — it owns no cleanup of its own.
+- A `poll` node's body sees only flow inputs, so a poll that reads this run's resources lives in a
+  module whose `input_bindings` pass node outputs (`{{create-spec.slug}}`). Bind outputs, not
+  generators: a `{{$runId}}` in a binding resolves with the child's run id. The poll's assertions
+  read `$["probe.items"]`; JSONPath stops at that output, and `contains` is a substring check on
+  its text, so assert `$["probe.items"] contains {{probeSlug}}`.
 - **A literal `{{` in a request goes through a flow variable.** A body that must carry the API's
   own template syntax (an email body with `{{if .name}}`) would be read as a flow reference. Store
   that text as a flow variable (`flows env set <id> --var BODY='<p>{{if .name}}…</p>'`) and send
