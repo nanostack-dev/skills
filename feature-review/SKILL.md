@@ -19,9 +19,12 @@ regression gate, ignored media directory and supported PR uploader. Use the
 project's actual commands and conventions; document missing bindings locally.
 
 Prefer the existing E2E setup. For Playwright, read the selected projects and
-their dependencies before adding a focused review configuration. An unavailable
-runtime, missing profile or failed product behavior is an outstanding requirement,
-with its command and evidence, until it is resolved.
+their dependencies before adding a focused review configuration. Apply
+[agent-workflow](../agent-workflow/SKILL.md) for local test selection and CI gates.
+An unavailable runtime, missing profile or failed product behavior remains an
+explicit validation boundary with its command and evidence. When local runtime
+access is unavailable to a cloud agent, use that workflow's cloud exception to
+request access in the PR and continue CI verification without claiming local execution.
 
 For changes with no browser-visible behavior, complete review with a documented
 PR boundary, passing service/contract/tooling checks and the repository's code
@@ -55,9 +58,11 @@ reviewed on all three profiles.
    pairs from the PR base and feature source with identical data, viewport and
    theme, using the repository's screenshot tool. Fix findings and rerun affected
    scenarios; generating screenshots alone is not a visual verdict.
-5. Finish the project's ordinary regression gate and applicable UI, component,
-   type, build and service checks. Responsive evidence supplements that gate.
-   Preserve its coverage and the normal CI failure diagnostics.
+5. Finish the affected-area local checks selected by `agent-workflow`, including
+   applicable UI, component, type, build and service checks. CI runs the complete
+   required regression gate; broaden local execution when the change warrants it.
+   Responsive evidence supplements that gate. Preserve its coverage and normal
+   CI failure diagnostics.
 
 ## Keep review fast and maintainable
 
