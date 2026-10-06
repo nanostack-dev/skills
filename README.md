@@ -20,6 +20,9 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
 
 ## Skills
 
+- [`feature-review`](feature-review/SKILL.md) — complete browser feature review
+  with mobile, tablet and desktop E2E checks, inspected screenshots, independent
+  validation and readable PR videos, while keeping ordinary tests fast.
 - [`real-world-examples`](real-world-examples/SKILL.md) — ground explanations,
   comparisons, and recommendations in concrete real-world examples.
 - [`flow-suite-testing`](flow-suite-testing/SKILL.md) — end-to-end API testing
