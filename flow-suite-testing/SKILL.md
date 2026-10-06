@@ -410,6 +410,10 @@ JSON. `flows update --file` takes an `UpdateFlowRequest` and merges field by fie
 - Modules are reusable sub-flows and nest several levels: a child exports with
   `--output name=childNode.key` and the parent reads `{{moduleNode.name}}`. Give a module a name
   that marks it as one, and keep it out of suite runs — it owns no cleanup of its own.
+- **A literal `{{` in a request goes through a flow variable.** A body that must carry the API's
+  own template syntax (an email body with `{{if .name}}`) would be read as a flow reference. Store
+  that text as a flow variable (`flows env set <id> --var BODY='<p>{{if .name}}…</p>'`) and send
+  `{{BODY}}`: a variable's value is substituted once and not scanned again.
 - Run `flows validate <id>` after wiring and before the first real run.
 
 ## When a suite fails
