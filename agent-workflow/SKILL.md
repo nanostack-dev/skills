@@ -24,10 +24,10 @@ Work in the repository's prescribed isolated checkout. Honor its contract-first,
 authentication, tenant-scope and CLI/MCP parity requirements. Use public setup APIs
 and disposable data in the owned test environment.
 
-For Anchor and Echopoint, start with the app's `e2e/guide/README.md` and its
-`.claude/skills/*-feature-review/SKILL.md` adapter when present. Anchor's affected
-planner and Echopoint's spec selection have different semantics; inspect the
-actual scripts and flags. A deployed smoke suite does not replace isolated E2E.
+Locate the project's E2E guide and project-owned review adapter when present.
+Affected-suite planners and manual spec selection have different semantics;
+inspect the actual scripts and flags. A deployed smoke suite does not replace
+isolated E2E.
 When reading this skill by raw URL, resolve supporting links from the same
 repository and ref.
 
