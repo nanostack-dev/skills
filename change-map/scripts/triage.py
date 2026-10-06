@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Split a change into buckets and write the deterministic half of a change map.
 
-    triage.py --pr 142 --repo nanostack-dev/anchor -o change.json --diff-out review.diff
+    triage.py --pr 42 --repo example/identity-service -o change.json --diff-out review.diff
     triage.py --range main...HEAD -o change.json --diff-out review.diff
 
 change.json gets meta, buckets and tests. review.diff keeps only the files a

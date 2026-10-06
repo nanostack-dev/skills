@@ -27,7 +27,7 @@ On a cloud worker, fetch the files first:
 
 ```
 base=https://raw.githubusercontent.com/nanostack-dev/skills/main/postmortem
-for f in scripts/build.py viewer.html template.json examples/echopoint-migration-timeout/postmortem.json; do curl -fsSL --create-dirs -o "$f" "$base/$f"; done
+for f in scripts/build.py viewer.html template.json examples/migration-timeout/postmortem.json; do curl -fsSL --create-dirs -o "$f" "$base/$f"; done
 ```
 
 ## Steps
@@ -88,7 +88,7 @@ Done when `build.py` reports no root cause without an action.
 
 ### 5. Write postmortem.json
 
-Read `template.json`: it shows every key in its exact shape. `examples/echopoint-migration-timeout/postmortem.json` is the quality bar: a real failed deploy with four root causes, two of them on the impact lens.
+Read `template.json`: it shows every key in its exact shape. `examples/migration-timeout/postmortem.json` is an anonymized illustrative report with four root causes, two on the impact lens. Its source links are placeholders, not incident evidence; use verified primary sources for the actual report.
 
 Write short. An event `label` stays under 64 characters (detail goes in `detail`), a why under 140 so the diagram stays legible, and the summary is four to six sentences. Inline `code`, **bold** and [links](https://example.com) render everywhere. Use the team's own severity scale and roles; names appear only under `responders`, never inside a why. `short` is the page title, two to four words.
 

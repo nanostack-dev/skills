@@ -1,7 +1,7 @@
 {
   "title": "One sentence: what broke and the mechanism, e.g. Prod deploy rolled back: migration outran the start timeout",
   "short": "Two to four words for the page title",
-  "service": "echopoint",
+  "service": "application-service",
   "date": "2026-10-01",
   "severity": "SEV2",
   "status": "draft",
