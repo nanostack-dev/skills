@@ -7,10 +7,10 @@ Output: write a JSON array to `{OUT}`:
 ```json
 [{"rule": "One pending invitation per email per organization",
   "how": "Checked in the service under the organization row lock",
-  "given": "Acme has a pending invitation for ana@acme.io",
+  "given": "Acme has a pending invitation for ana@example.invalid",
   "examples": [
-    {"when": "an admin invites ana@acme.io again", "then": "409 ALREADY_PENDING", "ok": false, "test": "TestCreateInvitation_RefusesSecondPendingForSameEmail"},
-    {"when": "eight admins invite bob@acme.io at the same instant", "then": "one 201, seven 409", "ok": true, "race": true, "test": "TestCreateInvitation_HoldsOnePendingPerEmailUnderConcurrentCreates"}]}]
+    {"when": "an admin invites ana@example.invalid again", "then": "409 ALREADY_PENDING", "ok": false, "test": "TestCreateInvitation_RefusesSecondPendingForSameEmail"},
+    {"when": "eight admins invite bob@example.invalid at the same instant", "then": "one 201, seven 409", "ok": true, "race": true, "test": "TestCreateInvitation_HoldsOnePendingPerEmailUnderConcurrentCreates"}]}]
 ```
 
 Rules:
@@ -18,7 +18,7 @@ Rules:
 - Group the tests into at most 9 business rules, each stated as a sentence a product person would agree with. {RULE_HINTS}
 - Tests that fit no rule go in a last rule, "Everyday reads and writes".
 - Every test appears in exactly one row. `test` is the exact function name.
-- `given` is the shared starting scene of the rule, with concrete example data: a named organization, emails like ana@acme.io, named roles. Extra setup for one row goes at the start of its `when` ("after the invitation expired, an admin invites ana@acme.io").
+- `given` is the shared starting scene of the rule, with concrete example data: a named organization, emails like ana@example.invalid, named roles. Extra setup for one row goes at the start of its `when` ("after the invitation expired, an admin invites ana@example.invalid").
 - `when` is one action in plain words, 14 words or fewer, from the actor's side.
 - `then` is the observable outcome, 10 words or fewer: the HTTP status and short error code when the test asserts one, otherwise the fact asserted.
 - `ok` is true for success, false for a refusal. `race: true` only for concurrency tests.

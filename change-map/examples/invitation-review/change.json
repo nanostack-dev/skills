@@ -2,14 +2,14 @@
  "v": 1,
  "meta": {
   "kind": "pr",
-  "repo": "nanostack-dev/anchor",
-  "number": 142,
-  "title": "feat(anchor): organization invitation API",
-  "url": "https://github.com/nanostack-dev/anchor/pull/142",
-  "author": "devnanostack",
+  "repo": "example/identity-service",
+  "number": 42,
+  "title": "Illustrative: organization invitation API",
+  "url": "https://example.invalid/identity-service/pull/42",
+  "author": "example-contributor",
   "base": "main",
-  "head": "feat/139-org-invitation-api",
-  "sha": "f0a71d5ebc820ba151c207f6a406d024ad2e0465",
+  "head": "feat/organization-invitations",
+  "sha": "0123456789abcdef0123456789abcdef01234567",
   "state": "open",
   "ci": "passing",
   "review": null,
@@ -22,7 +22,7 @@
    {
     "name": "organization_invitations",
     "new": true,
-    "file": "apps/anchor/migrations/000039_organization_invitations.up.sql:17",
+    "file": "apps/identity-service/migrations/000039_organization_invitations.up.sql:17",
     "cols": [
      [
       "id",
@@ -33,13 +33,13 @@
      [
       "product_id",
       "varchar(255)",
-      "fk \u2192 organizations, cascade",
+      "fk → organizations, cascade",
       ""
      ],
      [
       "organization_id",
       "varchar(255)",
-      "fk \u2192 organizations, cascade",
+      "fk → organizations, cascade",
       ""
      ],
      [
@@ -51,7 +51,7 @@
      [
       "product_role_id",
       "varchar(255)",
-      "fk \u2192 product_roles, cascade",
+      "fk → product_roles, cascade",
       ""
      ],
      [
@@ -124,42 +124,42 @@
   {
    "m": "POST",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6516"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6516"
   },
   {
    "m": "POST",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations/search",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6563"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6563"
   },
   {
    "m": "GET",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations/{invitation_id}",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6603"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6603"
   },
   {
    "m": "PUT",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations/{invitation_id}",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6629"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6629"
   },
   {
    "m": "DELETE",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations/{invitation_id}",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6668"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6668"
   },
   {
    "m": "POST",
    "p": "/v1/products/{product_id}/organizations/{organization_id}/invitations/{invitation_id}/resend",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6696"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6696"
   },
   {
    "m": "POST",
    "p": "/v1/products/{product_id}/invitations/lookup",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6731"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6731"
   },
   {
    "m": "POST",
    "p": "/v1/products/{product_id}/invitations/accept",
-   "ref": "apps/anchor/cmd/http/openapi.yaml:6768"
+   "ref": "apps/identity-service/cmd/http/openapi.yaml:6768"
   }
  ],
  "buckets": [
@@ -176,12 +176,12 @@
      3100
     ],
     [
-     "apps/anchor/internal/api/gen.go",
+     "apps/identity-service/internal/api/gen.go",
      1617,
      112
     ],
     [
-     "anchor-ui/src/client/types.gen.ts",
+     "admin-ui/src/client/types.gen.ts",
      519,
      0
     ],
@@ -191,37 +191,37 @@
      0
     ],
     [
-     "anchor-ui/src/client/zod.gen.ts",
+     "admin-ui/src/client/zod.gen.ts",
      199,
      0
     ],
     [
-     "anchor-ui/src/client/sdk.gen.ts",
+     "admin-ui/src/client/sdk.gen.ts",
      189,
      1
     ],
     [
-     "anchor-ui/src/client/@tanstack/react-query.gen.ts",
+     "admin-ui/src/client/@tanstack/react-query.gen.ts",
      152,
      2
     ],
     [
-     "apps/anchor/internal/db/gen/anchor/public/table/organization_invitations.go",
+     "apps/identity-service/internal/db/gen/identity-service/public/table/organization_invitations.go",
      105,
      0
     ],
     [
-     "apps/anchor/internal/security/testdata/route_security.json",
+     "apps/identity-service/internal/security/testdata/route_security.json",
      48,
      0
     ],
     [
-     "apps/anchor/internal/db/gen/anchor/public/model/organization_invitations.go",
+     "apps/identity-service/internal/db/gen/identity-service/public/model/organization_invitations.go",
      25,
      0
     ],
     [
-     "apps/anchor/internal/db/gen/anchor/public/table/table_use_schema.go",
+     "apps/identity-service/internal/db/gen/identity-service/public/table/table_use_schema.go",
      1,
      0
     ]
@@ -235,62 +235,62 @@
    "del": 0,
    "files": [
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_write_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_write_test.go",
      279,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_create_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_create_test.go",
      266,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_lookup_accept_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_lookup_accept_test.go",
      240,
      0
     ],
     [
-     "apps/anchor/cmd/it/shared/dsl/invitation_client.go",
+     "apps/identity-service/cmd/it/shared/dsl/invitation_client.go",
      235,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_read_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_read_test.go",
      199,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_shared_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_shared_test.go",
      149,
      0
     ],
     [
-     "clients/go/anchorsdk/anchorsdk_test.go",
+     "clients/go/identitysdk/identitysdk_test.go",
      142,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_events_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_events_test.go",
      121,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_scopes_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_scopes_test.go",
      121,
      0
     ],
     [
-     "apps/anchor/cmd/it/ct/organization_invitation_isolation_test.go",
+     "apps/identity-service/cmd/it/ct/organization_invitation_isolation_test.go",
      90,
      0
     ],
     [
-     "apps/anchor/internal/domain/organizationinvitation/invitation_test.go",
+     "apps/identity-service/internal/domain/organizationinvitation/invitation_test.go",
      46,
      0
     ],
     [
-     "clients/go/anchorsdk/events_test.go",
+     "clients/go/identitysdk/events_test.go",
      36,
      0
     ]
@@ -304,12 +304,12 @@
    "del": 0,
    "files": [
     [
-     "apps/anchor/migrations/000039_organization_invitations.up.sql",
+     "apps/identity-service/migrations/000039_organization_invitations.up.sql",
      38,
      0
     ],
     [
-     "apps/anchor/migrations/000039_organization_invitations.down.sql",
+     "apps/identity-service/migrations/000039_organization_invitations.down.sql",
      1,
      0
     ]
@@ -323,7 +323,7 @@
    "del": 0,
    "files": [
     [
-     "apps/anchor/cmd/http/openapi.yaml",
+     "apps/identity-service/cmd/http/openapi.yaml",
      481,
      0
     ]
@@ -337,82 +337,82 @@
    "del": 8,
    "files": [
     [
-     "apps/anchor/internal/invitation/service/service.go",
+     "apps/identity-service/internal/invitation/service/service.go",
      456,
      0
     ],
     [
-     "apps/anchor/internal/invitation/repository/repository.go",
+     "apps/identity-service/internal/invitation/repository/repository.go",
      319,
      0
     ],
     [
-     "clients/go/anchorsdk/invitations.go",
+     "clients/go/identitysdk/invitations.go",
      272,
      0
     ],
     [
-     "apps/anchor/internal/api/organization_invitation_api.go",
+     "apps/identity-service/internal/api/organization_invitation_api.go",
      242,
      0
     ],
     [
-     "apps/anchor/internal/domain/organizationinvitation/input_types.go",
+     "apps/identity-service/internal/domain/organizationinvitation/input_types.go",
      70,
      0
     ],
     [
-     "clients/go/anchorsdk/events.go",
+     "clients/go/identitysdk/events.go",
      69,
      0
     ],
     [
-     "apps/anchor/internal/domain/organizationinvitation/invitation.go",
+     "apps/identity-service/internal/domain/organizationinvitation/invitation.go",
      60,
      0
     ],
     [
-     "apps/anchor/internal/invitation/service/errors.go",
+     "apps/identity-service/internal/invitation/service/errors.go",
      40,
      0
     ],
     [
-     "apps/anchor/internal/invitation/event_registration.go",
+     "apps/identity-service/internal/invitation/event_registration.go",
      29,
      0
     ],
     [
-     "apps/anchor/internal/service/organization_membership_service.go",
+     "apps/identity-service/internal/service/organization_membership_service.go",
      6,
      6
     ],
     [
-     "apps/anchor/internal/invitation/service/validate.go",
+     "apps/identity-service/internal/invitation/service/validate.go",
      11,
      0
     ],
     [
-     "apps/anchor/internal/events/types.go",
+     "apps/identity-service/internal/events/types.go",
      6,
      0
     ],
     [
-     "apps/anchor/internal/security/security.go",
+     "apps/identity-service/internal/security/security.go",
      6,
      0
     ],
     [
-     "apps/anchor/internal/api/impl.go",
+     "apps/identity-service/internal/api/impl.go",
      4,
      0
     ],
     [
-     "apps/anchor/internal/service/organization_service.go",
+     "apps/identity-service/internal/service/organization_service.go",
      2,
      2
     ],
     [
-     "apps/anchor/internal/service/permission_base.go",
+     "apps/identity-service/internal/service/permission_base.go",
      1,
      0
     ]
@@ -426,12 +426,12 @@
    "del": 0,
    "files": [
     [
-     "apps/anchor/internal/invitation/module.go",
+     "apps/identity-service/internal/invitation/module.go",
      23,
      0
     ],
     [
-     "apps/anchor/cmd/app/app.go",
+     "apps/identity-service/cmd/app/app.go",
      2,
      0
     ]
@@ -445,7 +445,7 @@
    "del": 2,
    "files": [
     [
-     "clients/go/anchorsdk/README.md",
+     "clients/go/identitysdk/README.md",
      18,
      0
     ],
@@ -464,7 +464,7 @@
  ],
  "tests": [
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_create_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_create_test.go",
    "names": [
     "TestCreateInvitation_ReturnsTokenOnce",
     "TestCreateInvitation_DefaultsExpiryToSevenDays",
@@ -486,7 +486,7 @@
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_events_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_events_test.go",
    "names": [
     "TestCreateInvitation_EmitsTheCreatedEvent",
     "TestInvitationEvents_CarryIdentifiersOnly",
@@ -498,14 +498,14 @@
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_isolation_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_isolation_test.go",
    "names": [
     "TestInvitations_AnotherProductCannotReachAnInvitationOfThisProduct",
     "TestInvitations_APlatformOwnerOfAnotherTenantCannotReachThem"
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_lookup_accept_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_lookup_accept_test.go",
    "names": [
     "TestLookupInvitation_FindsTheInvitationByItsToken",
     "TestLookupInvitation_ReturnsNoToken",
@@ -525,7 +525,7 @@
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_read_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_read_test.go",
    "names": [
     "TestGetInvitation_ReturnsNoToken",
     "TestGetInvitation_ReadsExpiredOnceTheExpiryHasPassed",
@@ -544,14 +544,14 @@
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_scopes_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_scopes_test.go",
    "names": [
     "TestInvitationRoutes_RefuseAKeyWithoutTheScopeOfTheOperation",
     "TestInvitationRoutes_AcceptAKeyHoldingOnlyTheScopeOfTheOperation"
    ]
   },
   {
-   "file": "apps/anchor/cmd/it/ct/organization_invitation_write_test.go",
+   "file": "apps/identity-service/cmd/it/ct/organization_invitation_write_test.go",
    "names": [
     "TestUpdateInvitation_ChangesRoleAndExpiry",
     "TestUpdateInvitation_IgnoresAnEmailInTheBody",
@@ -576,20 +576,20 @@
    ]
   },
   {
-   "file": "apps/anchor/internal/domain/organizationinvitation/invitation_test.go",
+   "file": "apps/identity-service/internal/domain/organizationinvitation/invitation_test.go",
    "names": [
     "TestDeriveStatus"
    ]
   },
   {
-   "file": "clients/go/anchorsdk/anchorsdk_test.go",
+   "file": "clients/go/identitysdk/identitysdk_test.go",
    "names": [
-    "TestInvitationReturnsTheTokenOnlyWhereAnchorDoes",
+    "TestInvitationReturnsTheTokenOnlyWhereIdentityServiceDoes",
     "TestInvitationRefusalIsPermanent"
    ]
   },
   {
-   "file": "clients/go/anchorsdk/events_test.go",
+   "file": "clients/go/identitysdk/events_test.go",
    "names": [
     "TestWebhookHandlerOrganizationInvitationAccepted"
    ]

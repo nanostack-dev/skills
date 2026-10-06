@@ -1,14 +1,14 @@
 {
   "title": "Prod deploy rolled back: migration 000045 outran the 15 s start timeout",
   "short": "Migration 45 timeout",
-  "service": "echopoint",
+  "service": "application-service",
   "date": "2026-10-01",
   "severity": "SEV3",
   "status": "in review",
-  "authors": ["Nanostack engineering"],
-  "summary": "The prod deploy of echopoint `e1fbb08` failed. Migration 000045 renames flow extractor and operator values to snake_case across 10.8k `flow_executions` rows, and it was still running when the app's 15 s start timeout expired. Swarm rolled the service back to the previous image, but the migration had already committed, so `schema_migrations` stayed at version 45 with `dirty=true` and blocked every later deploy. The data was checked by hand, the flag cleared and the deploy rerun, which went live 6m 40s after it started. nanostack-framework v0.15.0 now runs migrations before start, outside that deadline.",
+  "authors": ["Service engineering"],
+  "summary": "Illustrative anonymized scenario; source links are placeholders. The prod deploy of application-service `e1fbb08` failed. Migration 000045 renames flow extractor and operator values to snake_case across 10.8k `flow_executions` rows, and it was still running when the app's 15 s start timeout expired. Swarm rolled the service back to the previous image, but the migration had already committed, so `schema_migrations` stayed at version 45 with `dirty=true` and blocked every later deploy. The data was checked by hand, the flag cleared and the deploy rerun, which went live 6m 40s after it started. shared-framework v0.15.0 now runs migrations before start, outside that deadline.",
   "impact": {
-    "text": "No customer saw an error: no client used the old values yet, which is why the rename shipped as one big change. For 6m 40s prod ran the previous image against rows the migration had already renamed, values that image does not know. Echopoint prod deploys were blocked until the dirty flag was cleared.",
+    "text": "No customer saw an error: no client used the old values yet, which is why the rename shipped as one big change. For 6m 40s prod ran the previous image against rows the migration had already renamed, values that image does not know. Application service prod deploys were blocked until the dirty flag was cleared.",
     "numbers": [
       {"value": "6m 40s", "label": "from prod deploy start to the new image healthy"},
       {"value": "10.8k", "label": "flow_executions rows rewritten by the migration"},
@@ -16,20 +16,20 @@
       {"value": "1", "label": "manual write to the prod database"}
     ]
   },
-  "trigger": "The prod deploy job started the new echopoint container. Its start ran migration 000045 inside the fx start hook, which has 15 s to finish.",
-  "detection": "The router's `Deploy echopoint to prod` job failed at 16:39:14 with `context deadline exceeded`, seen by the person watching the deploy. No alert fired: a deploy that rolls back leaves prod serving, so the health checks stayed green.",
+  "trigger": "The prod deploy job started the new application-service container. Its start ran migration 000045 inside the fx start hook, which has 15 s to finish.",
+  "detection": "The router's `Deploy application-service to prod` job failed at 16:39:14 with `context deadline exceeded`, seen by the person watching the deploy. No alert fired: a deploy that rolls back leaves prod serving, so the health checks stayed green.",
   "resolution": "Confirmed the migration had committed in full (no camelCase values left, triggers enabled), ran `UPDATE schema_migrations SET dirty=false WHERE version=45`, then reran the failed router job. The new image started against an already migrated schema, so it booted inside the deadline.",
   "timeline": {
     "events": [
-      {"t": "2026-10-01T16:25:53Z", "kind": "change", "label": "PR #425 merged with migration 000045", "detail": "snake_case extractor and operator values, one release, no alias for the old values.", "link": "https://github.com/nanostack-dev/echopoint/pull/425"},
+      {"t": "2026-10-01T16:25:53Z", "kind": "change", "label": "PR #425 merged with migration 000045", "detail": "snake_case extractor and operator values, one release, no alias for the old values.", "link": "https://example.invalid/example-org/application-service/pull/425"},
       {"t": "2026-10-01T16:31:48Z", "kind": "note", "label": "Dev flow suite fails on the first run", "detail": "The rerun at 16:34:21 passes and the router moves on to prod. Dev's tables are small, so the same migration finished well inside 15 s there."},
       {"t": "2026-10-01T16:35:01Z", "kind": "trigger", "label": "Prod deploy starts, migration runs on start", "detail": "10.8k `flow_executions` rows to rewrite inside the 15 s fx start deadline."},
-      {"t": "2026-10-01T16:39:14Z", "kind": "detect", "label": "Prod job fails: context deadline exceeded", "detail": "Swarm rolls back to the previous image. `schema_migrations` is left at 45 with `dirty=true`.", "link": "https://github.com/nanostack-dev/infra/actions/runs/36892442982"},
+      {"t": "2026-10-01T16:39:14Z", "kind": "detect", "label": "Prod job fails: context deadline exceeded", "detail": "Swarm rolls back to the previous image. `schema_migrations` is left at 45 with `dirty=true`.", "link": "https://example.invalid/example-org/infra/actions/runs/36892442982"},
       {"t": "2026-10-01T16:40:30Z", "approx": true, "kind": "mitigate", "label": "Data checked, dirty flag cleared by hand", "detail": "0 camelCase rows, triggers enabled, then `UPDATE schema_migrations SET dirty=false WHERE version=45`."},
       {"t": "2026-10-01T16:40:47Z", "kind": "mitigate", "label": "Failed prod job rerun", "detail": "`gh run rerun <router run> --failed`"},
       {"t": "2026-10-01T16:41:41Z", "kind": "resolve", "label": "e1fbb08 healthy on prod", "detail": "The new image boots against the migrated schema in time. The frontend is promoted at 16:41:54."},
-      {"t": "2026-10-01T17:06:15Z", "kind": "followup", "label": "nanostack-framework v0.15.0 merged", "detail": "Migrations run in `fx.Invoke`, before every `OnStart` and without its deadline. SIGTERM during a migration finishes the current file, then exits.", "link": "https://github.com/nanostack-dev/nanostack-framework/pull/43"},
-      {"t": "2026-10-01T19:04:04Z", "kind": "followup", "label": "echopoint and anchor move to v0.15.0", "detail": "echopoint #427 and anchor #161.", "link": "https://github.com/nanostack-dev/echopoint/pull/427"}
+      {"t": "2026-10-01T17:06:15Z", "kind": "followup", "label": "shared-framework v0.15.0 merged", "detail": "Migrations run in `fx.Invoke`, before every `OnStart` and without its deadline. SIGTERM during a migration finishes the current file, then exits.", "link": "https://example.invalid/example-org/shared-framework/pull/43"},
+      {"t": "2026-10-01T19:04:04Z", "kind": "followup", "label": "application-service and identity-service move to v0.15.0", "detail": "application-service #427 and identity-service #161.", "link": "https://example.invalid/example-org/application-service/pull/427"}
     ]
   },
   "whys": {
@@ -37,7 +37,7 @@
     "because": [
       {
         "text": "The new container never became ready: fx stopped its start with context deadline exceeded",
-        "evidence": "[Deploy echopoint to prod, attempt 2](https://github.com/nanostack-dev/infra/actions/runs/36892442982)",
+        "evidence": "[Deploy application-service to prod, attempt 2](https://example.invalid/example-org/infra/actions/runs/36892442982)",
         "because": [
           {
             "text": "Migration 000045 was still rewriting 10.8k flow_executions rows when the 15 s start timeout expired",
@@ -45,7 +45,7 @@
             "because": [
               {
                 "text": "The framework ran migrations in an fx OnStart hook, so they shared the app's 15 s start deadline",
-                "evidence": "nanostack-framework before v0.15.0",
+                "evidence": "shared-framework before v0.15.0",
                 "because": [
                   {
                     "text": "That deadline was sized for wiring services, when every migration was a schema change that took milliseconds",
@@ -129,25 +129,25 @@
     ]
   },
   "actions": [
-    {"id": "A1", "what": "Run migrations in `fx.Invoke`, before every `OnStart`, without the start deadline", "type": "prevent", "owner": "nanostack-framework", "due": "2026-10-01", "status": "done", "ticket": {"label": "nanostack-framework#43", "url": "https://github.com/nanostack-dev/nanostack-framework/pull/43"}, "fixes": ["R1"]},
-    {"id": "A2", "what": "On SIGTERM during a migration, finish the current file and leave the version clean before exiting", "type": "mitigate", "owner": "nanostack-framework", "due": "2026-10-01", "status": "done", "ticket": {"label": "nanostack-framework#43", "url": "https://github.com/nanostack-dev/nanostack-framework/pull/43"}, "fixes": ["R3"]},
-    {"id": "A3", "what": "Move echopoint and anchor to framework v0.15.0", "type": "prevent", "owner": "echopoint, anchor", "due": "2026-10-01", "status": "done", "ticket": {"label": "echopoint#427", "url": "https://github.com/nanostack-dev/echopoint/pull/427"}, "fixes": ["R1", "R3"]},
-    {"id": "A4", "what": "Log each migration's duration at boot and warn when it passes half of the healthcheck window", "type": "detect", "owner": "nanostack-framework", "due": "2026-10-15", "status": "open", "fixes": ["R2"]},
-    {"id": "A5", "what": "Time every data migration against a restored prod dump before merge and write the duration in the PR", "type": "process", "owner": "echopoint", "due": "2026-10-15", "status": "open", "fixes": ["R2"]},
-    {"id": "A6", "what": "Move rewrites that can run past the 90 s healthcheck to a pgqueue backfill job instead of a start-time migration", "type": "prevent", "owner": "echopoint", "due": "2026-10-31", "status": "open", "fixes": ["R1"]},
-    {"id": "A7", "what": "Ship a contract value change used by live clients over two releases: accept old and new values first, so a rollback stays safe", "type": "process", "owner": "echopoint", "due": "2026-10-15", "status": "open", "fixes": ["R4"]}
+    {"id": "A1", "what": "Run migrations in `fx.Invoke`, before every `OnStart`, without the start deadline", "type": "prevent", "owner": "shared-framework", "due": "2026-10-01", "status": "done", "ticket": {"label": "shared-framework#43", "url": "https://example.invalid/example-org/shared-framework/pull/43"}, "fixes": ["R1"]},
+    {"id": "A2", "what": "On SIGTERM during a migration, finish the current file and leave the version clean before exiting", "type": "mitigate", "owner": "shared-framework", "due": "2026-10-01", "status": "done", "ticket": {"label": "shared-framework#43", "url": "https://example.invalid/example-org/shared-framework/pull/43"}, "fixes": ["R3"]},
+    {"id": "A3", "what": "Move application-service and identity-service to framework v0.15.0", "type": "prevent", "owner": "application-service, identity-service", "due": "2026-10-01", "status": "done", "ticket": {"label": "application-service#427", "url": "https://example.invalid/example-org/application-service/pull/427"}, "fixes": ["R1", "R3"]},
+    {"id": "A4", "what": "Log each migration's duration at boot and warn when it passes half of the healthcheck window", "type": "detect", "owner": "shared-framework", "due": "2026-10-15", "status": "open", "fixes": ["R2"]},
+    {"id": "A5", "what": "Time every data migration against a restored prod dump before merge and write the duration in the PR", "type": "process", "owner": "application-service", "due": "2026-10-15", "status": "open", "fixes": ["R2"]},
+    {"id": "A6", "what": "Move rewrites that can run past the 90 s healthcheck to a pgqueue backfill job instead of a start-time migration", "type": "prevent", "owner": "application-service", "due": "2026-10-31", "status": "open", "fixes": ["R1"]},
+    {"id": "A7", "what": "Ship a contract value change used by live clients over two releases: accept old and new values first, so a rollback stays safe", "type": "process", "owner": "application-service", "due": "2026-10-15", "status": "open", "fixes": ["R4"]}
   ],
   "responders": [
     {"role": "Incident lead", "name": "On-call engineer"},
     {"role": "Diagnosis and framework fix", "name": "Claude Code agent"}
   ],
   "messaging": {
-    "internal": "echopoint prod deploy of e1fbb08 failed at 16:39 UTC: migration 000045 outran the 15 s start timeout and left migration 45 dirty. Data verified complete, flag cleared, redeployed and healthy at 16:41. No customer impact. Framework fix in nanostack-framework v0.15.0 (#43)."
+    "internal": "application-service prod deploy of e1fbb08 failed at 16:39 UTC: migration 000045 outran the 15 s start timeout and left migration 45 dirty. Data verified complete, flag cleared, redeployed and healthy at 16:41. No customer impact. Framework fix in shared-framework v0.15.0 (#43)."
   },
   "links": [
-    {"label": "Router run with the failed and rerun prod job", "url": "https://github.com/nanostack-dev/infra/actions/runs/36892442982"},
-    {"label": "echopoint #425: snake_case values and migration 000045", "url": "https://github.com/nanostack-dev/echopoint/pull/425"},
-    {"label": "nanostack-framework #43: migrations before start", "url": "https://github.com/nanostack-dev/nanostack-framework/pull/43"},
-    {"label": "anchor #161: framework v0.15.0", "url": "https://github.com/nanostack-dev/anchor/pull/161"}
+    {"label": "Router run with the failed and rerun prod job", "url": "https://example.invalid/example-org/infra/actions/runs/36892442982"},
+    {"label": "application-service #425: snake_case values and migration 000045", "url": "https://example.invalid/example-org/application-service/pull/425"},
+    {"label": "shared-framework #43: migrations before start", "url": "https://example.invalid/example-org/shared-framework/pull/43"},
+    {"label": "identity-service #161: framework v0.15.0", "url": "https://example.invalid/example-org/identity-service/pull/161"}
   ]
 }

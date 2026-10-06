@@ -4,7 +4,7 @@
   "links": [
    {
     "label": "Issue #139",
-    "url": "https://github.com/org/repo/issues/139"
+    "url": "https://example.invalid/repository/issues/139"
    }
   ]
  },
@@ -82,7 +82,7 @@
     {
      "label": "Two creates at the same instant",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"bob@acme.io\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{ \"errors\": [{ \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\" }] }"
+     "code": "POST /v1/products/prod_demo/organizations/org_acme/invitations\n{ \"email\": \"bob@example.invalid\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{ \"errors\": [{ \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\" }] }"
     },
     {
      "label": "First statement of every write",
@@ -103,7 +103,7 @@
     {
      "label": "Deleting an accepted invitation",
      "lang": "http",
-     "code": "DELETE /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n\n204\nevent → organization.invitation.deleted"
+     "code": "DELETE /v1/products/prod_demo/organizations/org_acme/invitations/oinv_2Kx9\n\n204\nevent → organization.invitation.deleted"
     }
    ]
   }

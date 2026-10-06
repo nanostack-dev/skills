@@ -4,19 +4,19 @@
   "links": [
    {
     "label": "Issue #139",
-    "url": "https://github.com/nanostack-dev/anchor/issues/139"
+    "url": "https://example.invalid/example/identity-service/issues/139"
    },
    {
     "label": "Epic #138",
-    "url": "https://github.com/nanostack-dev/anchor/issues/138"
+    "url": "https://example.invalid/example/identity-service/issues/138"
    },
    {
     "label": "ADR-0019 (#137)",
-    "url": "https://github.com/nanostack-dev/anchor/pull/137"
+    "url": "https://example.invalid/example/identity-service/pull/137"
    }
   ]
  },
- "summary": "Organizations can now invite people. A Product invites an email with a role, gets a one-time token, sends it however it likes, and later accepts it for a signed-in user, which creates the membership.",
+ "summary": "Anonymized illustrative example. References, counts and test descriptions are sample data, not evidence about a current project. Organizations can now invite people. A Product invites an email with a role, gets a one-time token, sends it however it likes, and later accepts it for a signed-in user, which creates the membership.",
  "verdict": {
   "risk": "medium",
   "door": "two-way",
@@ -33,20 +33,20 @@
    "instead": "A stored status plus a scheduled job that marks rows expired.",
    "cost": "\"One pending per email\" depends on `now()`, so it cannot be a partial unique index. The service has to enforce it.",
    "refs": [
-    "apps/anchor/migrations/000039_organization_invitations.up.sql:7",
-    "apps/anchor/internal/domain/organizationinvitation/invitation.go:37",
-    "apps/anchor/internal/invitation/repository/repository.go:106"
+    "apps/identity-service/migrations/000039_organization_invitations.up.sql:7",
+    "apps/identity-service/internal/domain/organizationinvitation/invitation.go:37",
+    "apps/identity-service/internal/invitation/repository/repository.go:106"
    ],
    "example": [
     {
      "label": "Row in Postgres",
      "lang": "sql",
-     "code": "SELECT email, accepted_at, expires_at\nFROM organization_invitations WHERE id = 'oinv_2Kx9';\n\n-- ana@acme.io | NULL | 2026-09-28 09:00+00\n-- no status column: the clock has passed expires_at"
+     "code": "SELECT email, accepted_at, expires_at\nFROM organization_invitations WHERE id = 'oinv_2Kx9';\n\n-- ana@example.invalid | NULL | 2026-09-28 09:00+00\n-- no status column: the clock has passed expires_at"
     },
     {
      "label": "GET the invitation",
      "lang": "http",
-     "code": "GET /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"expired\",\n  \"expires_at\": \"2026-09-28T09:00:00Z\",\n  \"accepted_at\": null\n}"
+     "code": "GET /v1/products/prod_demo/organizations/org_acme/invitations/oinv_2Kx9\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@example.invalid\",\n  \"role_id\": \"role_member\",\n  \"status\": \"expired\",\n  \"expires_at\": \"2026-09-28T09:00:00Z\",\n  \"accepted_at\": null\n}"
     }
    ]
   },
@@ -59,21 +59,21 @@
    "instead": "A partial unique index (impossible here) or SERIALIZABLE isolation with retries.",
    "cost": "All invitation writes in one organization run one at a time, and they wait on any other transaction holding that row.",
    "refs": [
-    "apps/anchor/internal/invitation/service/service.go:100",
-    "apps/anchor/internal/invitation/repository/repository.go:132",
-    "apps/anchor/internal/invitation/service/service.go:405"
+    "apps/identity-service/internal/invitation/service/service.go:100",
+    "apps/identity-service/internal/invitation/repository/repository.go:132",
+    "apps/identity-service/internal/invitation/service/service.go:405"
    ],
    "see": "race",
    "example": [
     {
      "label": "First statement of every write",
      "lang": "sql",
-     "code": "BEGIN;\nSELECT * FROM organizations\nWHERE id = 'org_acme' AND product_id = 'prod_ep'\nFOR NO KEY UPDATE;   -- request B waits here\n-- then: pending for bob? member with that email? insert\nCOMMIT;"
+     "code": "BEGIN;\nSELECT * FROM organizations\nWHERE id = 'org_acme' AND product_id = 'prod_demo'\nFOR NO KEY UPDATE;   -- request B waits here\n-- then: pending for bob? member with that email? insert\nCOMMIT;"
     },
     {
      "label": "Two creates at the same instant",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"bob@acme.io\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{\n  \"errors\": [\n    {\n      \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\",\n      \"message\": \"A pending invitation already exists for this email address in this organization.\"\n    }\n  ]\n}"
+     "code": "POST /v1/products/prod_demo/organizations/org_acme/invitations\n{ \"email\": \"bob@example.invalid\", \"role_id\": \"role_member\" }\n\nrequest A → 201\nrequest B → 409\n{\n  \"errors\": [\n    {\n      \"code\": \"ORGANIZATION_INVITATION_ALREADY_PENDING\",\n      \"message\": \"A pending invitation already exists for this email address in this organization.\"\n    }\n  ]\n}"
     }
    ]
   },
@@ -81,21 +81,21 @@
    "id": "token-hash",
    "tag": "security",
    "title": "Only a SHA-256 hash of the token is stored",
-   "choice": "The `anchor_inv_…` token is returned once, by create and by resend. Lookup and accept hash what they receive and compare hashes.",
+   "choice": "The `invite_…` token is returned once, by create and by resend. Lookup and accept hash what they receive and compare hashes.",
    "why": "A database leak does not hand out working invitations. It is the same pattern as API keys.",
    "instead": "Store the token so it can be shown again.",
    "cost": "A lost token cannot be recovered. The Product calls resend, which issues a new token and kills the old one.",
    "refs": [
-    "apps/anchor/internal/security/security.go:96",
-    "apps/anchor/migrations/000039_organization_invitations.up.sql:23",
-    "apps/anchor/internal/invitation/service/service.go:351"
+    "apps/identity-service/internal/security/security.go:96",
+    "apps/identity-service/migrations/000039_organization_invitations.up.sql:23",
+    "apps/identity-service/internal/invitation/service/service.go:351"
    ],
    "see": "resend",
    "example": [
     {
      "label": "POST create · the only time the token appears",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n{ \"email\": \"ana@acme.io\", \"role_id\": \"role_member\" }\n\n201\n{\n  \"id\": \"oinv_2Kx9\",\n  \"email\": \"ana@acme.io\",\n  \"status\": \"pending\",\n  \"token\": \"anchor_inv_7HkQ2mNOP1234567890abc\"\n}"
+     "code": "POST /v1/products/prod_demo/organizations/org_acme/invitations\n{ \"email\": \"ana@example.invalid\", \"role_id\": \"role_member\" }\n\n201\n{\n  \"id\": \"oinv_2Kx9\",\n  \"email\": \"ana@example.invalid\",\n  \"status\": \"pending\",\n  \"token\": \"invite_7HkQ2mNOP1234567890abc\"\n}"
     },
     {
      "label": "What Postgres keeps",
@@ -107,25 +107,25 @@
   {
    "id": "no-email",
    "tag": "boundary",
-   "title": "Anchor sends no email. The Product delivers the token.",
-   "choice": "Anchor owns the invitation record and its lifecycle. Delivery, the email template and the accept page all belong to the Product.",
+   "title": "Identity service sends no email. The Product delivers the token.",
+   "choice": "Identity service owns the invitation record and its lifecycle. Delivery, the email template and the accept page all belong to the Product.",
    "why": "Each Product has its own brand, sender and accept flow. ADR-0019 settles this.",
-   "instead": "Anchor emails the invitee.",
+   "instead": "Identity service emails the invitee.",
    "cost": "Every Product has to build its own email and its own accept page.",
    "refs": [
-    "apps/anchor/internal/invitation/service/service.go:21"
+    "apps/identity-service/internal/invitation/service/service.go:21"
    ],
    "see": "invite",
    "example": [
     {
-     "label": "Anchor hands the token back",
+     "label": "Identity service hands the token back",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/organizations/org_acme/invitations\n\n201\n{ \"id\": \"oinv_2Kx9\", \"token\": \"anchor_inv_7Hk…\" }"
+     "code": "POST /v1/products/prod_demo/organizations/org_acme/invitations\n\n201\n{ \"id\": \"oinv_2Kx9\", \"token\": \"invite_7Hk…\" }"
     },
     {
      "label": "The Product builds and sends the email",
      "lang": "text",
-     "code": "To: ana@acme.io\nSubject: Acme invited you to EchoPoint\n\nAccept: https://app.echopoint.dev/invite#anchor_inv_7Hk…\n\n(the Product owns the template, sender and accept page)"
+     "code": "To: ana@example.invalid\nSubject: Acme invited you to Example product\n\nAccept: https://example.invalid/invite#invite_7Hk…\n\n(the Product owns the template, sender and accept page)"
     }
    ]
   },
@@ -138,19 +138,19 @@
    "instead": "Refuse the accept when the emails differ.",
    "cost": "The token works like a password: whoever holds it can join with any product user of that Product.",
    "refs": [
-    "apps/anchor/internal/invitation/service/service.go:285"
+    "apps/identity-service/internal/invitation/service/service.go:285"
    ],
    "see": "invite",
    "example": [
     {
-     "label": "Invited ana@acme.io, accepted by Bob",
+     "label": "Invited ana@example.invalid, accepted by Bob",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/invitations/accept\n{\n  \"token\": \"anchor_inv_7Hk\\u2026\",\n  \"product_user_id\": \"pu_bob\"\n}\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"accepted\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": \"2026-09-30T14:02:00Z\"\n}"
+     "code": "POST /v1/products/prod_demo/invitations/accept\n{\n  \"token\": \"invite_7Hk\\u2026\",\n  \"product_user_id\": \"pu_bob\"\n}\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@example.invalid\",\n  \"role_id\": \"role_member\",\n  \"status\": \"accepted\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": \"2026-09-30T14:02:00Z\"\n}"
     },
     {
      "label": "Who joined",
      "lang": "text",
-     "code": "Acme members\n  pu_bob  bob@gmail.com  role_member   ← not ana@acme.io\n\nAnchor never compares the two emails.\nThe Product decides who may accept."
+     "code": "Acme members\n  pu_bob  bob@gmail.com  role_member   ← not ana@example.invalid\n\nIdentity service never compares the two emails.\nThe Product decides who may accept."
     }
    ]
   },
@@ -163,15 +163,15 @@
    "instead": "`GET /invitations/{token}`.",
    "cost": "A read done as a POST: responses cannot be cached, and it is not plain REST.",
    "refs": [
-    "apps/anchor/cmd/http/openapi.yaml:6728",
-    "apps/anchor/internal/api/organization_invitation_api.go:152"
+    "apps/identity-service/cmd/http/openapi.yaml:6728",
+    "apps/identity-service/internal/api/organization_invitation_api.go:152"
    ],
    "see": "invite",
    "example": [
     {
      "label": "Lookup, token in the body",
      "lang": "http",
-     "code": "POST /v1/products/prod_ep/invitations/lookup\n{ \"token\": \"anchor_inv_7Hk…\" }\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@acme.io\",\n  \"role_id\": \"role_member\",\n  \"status\": \"pending\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": null\n}"
+     "code": "POST /v1/products/prod_demo/invitations/lookup\n{ \"token\": \"invite_7Hk…\" }\n\n200\n{\n  \"id\": \"oinv_2Kx9\",\n  \"organization_id\": \"org_acme\",\n  \"email\": \"ana@example.invalid\",\n  \"role_id\": \"role_member\",\n  \"status\": \"pending\",\n  \"expires_at\": \"2026-10-07T09:00:00Z\",\n  \"accepted_at\": null\n}"
     },
     {
      "label": "Response · 400",
@@ -189,8 +189,8 @@
    "instead": "Insert the membership row from the invitation service.",
    "cost": "The invitation package now depends on the core service package, and two error constructors there became exported.",
    "refs": [
-    "apps/anchor/internal/invitation/service/service.go:318",
-    "apps/anchor/internal/invitation/service/service.go:328"
+    "apps/identity-service/internal/invitation/service/service.go:318",
+    "apps/identity-service/internal/invitation/service/service.go:328"
    ],
    "see": "invite",
    "example": [
@@ -445,12 +445,12 @@
    "sev": "question",
    "title": "Delete works on accepted and expired invitations",
    "body": "Delete has no status check. Deleting an accepted invitation removes its history and emits `organization.invitation.deleted` for something that is already a membership. Is that intended?",
-   "ref": "apps/anchor/internal/invitation/service/service.go:205",
+   "ref": "apps/identity-service/internal/invitation/service/service.go:205",
    "example": [
     {
      "label": "Deleting an invitation Ana already accepted",
      "lang": "http",
-     "code": "DELETE /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9      (status: accepted)\n\n204\n\nevent → organization.invitation.deleted\n        Ana stays a member"
+     "code": "DELETE /v1/products/prod_demo/organizations/org_acme/invitations/oinv_2Kx9      (status: accepted)\n\n204\n\nevent → organization.invitation.deleted\n        Ana stays a member"
     }
    ]
   },
@@ -459,12 +459,12 @@
    "sev": "question",
    "title": "Resend replaces a custom expiry with the 7-day default",
    "body": "Resend sets `expires_at` to now + 7 days. An expiry that was set on create or update is lost.",
-   "ref": "apps/anchor/internal/invitation/service/service.go:226",
+   "ref": "apps/identity-service/internal/invitation/service/service.go:226",
    "example": [
     {
      "label": "The admin set 30 days, resend brings back 7",
      "lang": "http",
-     "code": "PUT /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9\n{ \"role_id\": \"role_member\", \"expires_at\": \"2026-10-30T09:00:00Z\" }\n→ expires_at 2026-10-30\n\nPOST /v1/products/prod_ep/organizations/org_acme/invitations/oinv_2Kx9/resend\n→ expires_at 2026-10-07   (now + 7 days)"
+     "code": "PUT /v1/products/prod_demo/organizations/org_acme/invitations/oinv_2Kx9\n{ \"role_id\": \"role_member\", \"expires_at\": \"2026-10-30T09:00:00Z\" }\n→ expires_at 2026-10-30\n\nPOST /v1/products/prod_demo/organizations/org_acme/invitations/oinv_2Kx9/resend\n→ expires_at 2026-10-07   (now + 7 days)"
     }
    ]
   },
@@ -473,7 +473,7 @@
    "sev": "risk",
    "title": "Deleting a role deletes its invitations with no event",
    "body": "`product_role_id` cascades. A Product that mirrors invitations from events keeps entries that no longer exist. The PR notes this matches how memberships behave.",
-   "ref": "apps/anchor/migrations/000039_organization_invitations.up.sql:22",
+   "ref": "apps/identity-service/migrations/000039_organization_invitations.up.sql:22",
    "example": [
     {
      "label": "Delete a role",
@@ -491,7 +491,7 @@
     {
      "label": "An existing endpoint config",
      "lang": "json",
-     "code": "{\n  \"url\": \"https://echopoint.dev/hooks/anchor\",\n  \"event_types\": [\n    \"organization.created\",\n    \"organization.membership.created\",\n    \"organization.membership.deleted\"\n  ]\n}\n\n// add organization.invitation.* or nothing arrives"
+     "code": "{\n  \"url\": \"https://example.invalid/hooks/identity\",\n  \"event_types\": [\n    \"organization.created\",\n    \"organization.membership.created\",\n    \"organization.membership.deleted\"\n  ]\n}\n\n// add organization.invitation.* or nothing arrives"
     }
    ]
   },
@@ -499,7 +499,7 @@
    "id": "validate-wrapper",
    "sev": "nit",
    "title": "`validateStruct` wraps the framework call and adds nothing",
-   "ref": "apps/anchor/internal/invitation/service/validate.go:5",
+   "ref": "apps/identity-service/internal/invitation/service/validate.go:5",
    "example": [
     {
      "label": "validate.go",
@@ -513,8 +513,8 @@
  "system": {
   "cols": [
    "Product side",
-   "Anchor API",
-   "Anchor services",
+   "Identity service API",
+   "Identity service services",
    "Storage and events"
   ],
   "nodes": [
@@ -529,7 +529,7 @@
    {
     "id": "product",
     "label": "Product backend",
-    "sub": "EchoPoint or any Product",
+    "sub": "Example product or any Product",
     "kind": "service",
     "col": 0,
     "row": 1
@@ -600,7 +600,7 @@
    {
     "from": "admin",
     "to": "product",
-    "label": "invite ana@acme.io"
+    "label": "invite ana@example.invalid"
    },
    {
     "from": "product",
@@ -664,12 +664,12 @@
     {
      "id": "product",
      "label": "Product",
-     "sub": "EchoPoint",
+     "sub": "Example product",
      "kind": "service"
     },
     {
-     "id": "anchor",
-     "label": "Anchor",
+     "id": "identity",
+     "label": "Identity service",
      "sub": "invitation service",
      "kind": "service"
     },
@@ -702,25 +702,25 @@
      "from": "admin",
      "to": "product",
      "k": "call",
-     "label": "Invite ana@acme.io as member",
+     "label": "Invite ana@example.invalid as member",
      "say": "An admin of Acme invites Ana in the Product UI."
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
      "label": "POST …/invitations",
-     "say": "The Product calls Anchor with the email and the role."
+     "say": "The Product calls Identity service with the email and the role."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "db",
      "k": "call",
      "label": "lock Acme, insert row",
-     "say": "Anchor locks the organization row, checks the rules, and stores the invitation with only the **hash** of the token.",
+     "say": "Identity service locks the organization row, checks the rules, and stores the invitation with only the **hash** of the token.",
      "board": [
       [
-       "ana@acme.io",
+       "ana@example.invalid",
        "member",
        "sha256(7Hk…)",
        "—",
@@ -729,18 +729,18 @@
      ]
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "reply",
-     "label": "201 · token anchor_inv_7Hk…",
-     "say": "The clear token exists in this one response. Anchor cannot show it again."
+     "label": "201 · token invite_7Hk…",
+     "say": "The clear token exists in this one response. Identity service cannot show it again."
     },
     {
      "from": "product",
      "to": "ana",
      "k": "call",
      "label": "email with accept link",
-     "say": "The Product sends the email. Anchor sends none."
+     "say": "The Product sends the email. Identity service sends none."
     },
     {
      "from": "ana",
@@ -751,13 +751,13 @@
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
      "label": "POST /invitations/lookup {token}",
      "say": "The Product looks the token up to render its accept page. The token is in the body, never in the URL."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "reply",
      "label": "200 · pending, Acme, member",
@@ -765,20 +765,20 @@
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
      "label": "POST /invitations/accept {token, user}",
      "say": "Ana clicks Accept. The Product sends the token and her existing product user."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "db",
      "k": "call",
      "label": "lock · AddMember · accepted_at",
      "say": "One transaction: lock, re-check it is pending, add the membership, mark it accepted.",
      "board": [
       [
-       "ana@acme.io",
+       "ana@example.invalid",
        "member",
        "sha256(7Hk…)",
        "Sep 29 14:02",
@@ -787,7 +787,7 @@
      ]
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "reply",
      "label": "200 · 2 events emitted",
@@ -809,7 +809,7 @@
     {
      "id": "ra",
      "label": "Request A",
-     "sub": "Anchor transaction",
+     "sub": "Identity service transaction",
      "kind": "service"
     },
     {
@@ -821,7 +821,7 @@
     {
      "id": "rb",
      "label": "Request B",
-     "sub": "Anchor transaction",
+     "sub": "Identity service transaction",
      "kind": "service"
     },
     {
@@ -843,7 +843,7 @@
       "free"
      ],
      [
-      "pending for bob@acme.io",
+      "pending for bob@example.invalid",
       "0"
      ]
     ]
@@ -853,14 +853,14 @@
      "from": "a",
      "to": "ra",
      "k": "call",
-     "label": "invite bob@acme.io",
+     "label": "invite bob@example.invalid",
      "say": "Admin A invites Bob."
     },
     {
      "from": "b",
      "to": "rb",
      "k": "call",
-     "label": "invite bob@acme.io",
+     "label": "invite bob@example.invalid",
      "say": "In the same millisecond, Admin B invites Bob too."
     },
     {
@@ -875,7 +875,7 @@
        "held by A"
       ],
       [
-       "pending for bob@acme.io",
+       "pending for bob@example.invalid",
        "0"
       ]
      ]
@@ -907,7 +907,7 @@
        "free"
       ],
       [
-       "pending for bob@acme.io",
+       "pending for bob@example.invalid",
        "1"
       ]
      ]
@@ -931,7 +931,7 @@
        "held by B"
       ],
       [
-       "pending for bob@acme.io",
+       "pending for bob@example.invalid",
        "1"
       ]
      ]
@@ -955,7 +955,7 @@
        "free"
       ],
       [
-       "pending for bob@acme.io",
+       "pending for bob@example.invalid",
        "1"
       ]
      ]
@@ -976,12 +976,12 @@
     {
      "id": "product",
      "label": "Product",
-     "sub": "EchoPoint",
+     "sub": "Example product",
      "kind": "service"
     },
     {
-     "id": "anchor",
-     "label": "Anchor",
+     "id": "identity",
+     "label": "Identity service",
      "sub": "invitation service",
      "kind": "service"
     },
@@ -993,7 +993,7 @@
     }
    ],
    "board": {
-    "title": "organization_invitations · ana@acme.io",
+    "title": "organization_invitations · ana@example.invalid",
     "cols": [
      "token_hash",
      "expires_at",
@@ -1017,17 +1017,17 @@
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
      "label": "POST …/{id}/resend",
-     "say": "The Product asks Anchor for a new token."
+     "say": "The Product asks Identity service for a new token."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "db",
      "k": "call",
      "label": "replace hash, expiry = now + 7d",
-     "say": "Anchor overwrites the hash and resets the expiry. A custom expiry is lost here (see Worth a look).",
+     "say": "Identity service overwrites the hash and resets the expiry. A custom expiry is lost here (see Worth a look).",
      "board": [
       [
        "~sha256(7Hk…)",
@@ -1042,35 +1042,35 @@
      ]
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "reply",
-     "label": "200 · token anchor_inv_Q2m…",
+     "label": "200 · token invite_Q2m…",
      "say": "The new token is returned once. The Product emails it."
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
-     "label": "accept with anchor_inv_7Hk…",
+     "label": "accept with invite_7Hk…",
      "say": "Later, someone tries the old link."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "db",
      "k": "call",
      "label": "find by sha256(7Hk…)",
-     "say": "Anchor hashes the old token and looks it up."
+     "say": "Identity service hashes the old token and looks it up."
     },
     {
      "from": "db",
-     "to": "anchor",
+     "to": "identity",
      "k": "reply",
      "label": "no row",
      "say": "No row carries that hash any more."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "error",
      "label": "400 TOKEN_NOT_FOUND",
@@ -1078,13 +1078,13 @@
     },
     {
      "from": "product",
-     "to": "anchor",
+     "to": "identity",
      "k": "call",
-     "label": "accept with anchor_inv_Q2m…",
+     "label": "accept with invite_Q2m…",
      "say": "Ana uses the new link."
     },
     {
-     "from": "anchor",
+     "from": "identity",
      "to": "product",
      "k": "reply",
      "label": "200 · accepted",

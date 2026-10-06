@@ -7,7 +7,7 @@ description: Turn a pull request or in-progress branch into an interactive, pict
 
 A change map is one page that answers what a reviewer has to decide. The reviewer looks at the pictures, reads the decisions and the risks, and approves or questions each decision. They open code only through the file links on the page.
 
-**Picture first.** The reviewer has already read too much text. Every fact that can be a diagram, a scenario or a table goes there. Prose only carries why and what it costs. One concrete example (Ana at Acme, `ana@acme.io`, token `anchor_inv_7Hk…`) beats a paragraph.
+**Picture first.** The reviewer has already read too much text. Every fact that can be a diagram, a scenario or a table goes there. Prose only carries why and what it costs. One concrete example (Ana at Acme, `ana@example.invalid`, token `invite_7Hk…`) beats a paragraph.
 
 The work splits three ways, and you write only the middle part:
 
@@ -21,12 +21,7 @@ The work splits three ways, and you write only the middle part:
 
 ## Files
 
-Installed, the files sit next to this one. On a cloud worker, fetch them:
-
-```
-base=https://raw.githubusercontent.com/nanostack-dev/skills/main/change-map
-for f in scripts/triage.py scripts/build.py viewer.html template.json prompts/given-when-then.md; do curl -fsSL --create-dirs -o "$f" "$base/$f"; done
-```
+Use `scripts/triage.py`, `scripts/build.py`, `viewer.html`, `template.json` and `prompts/given-when-then.md` bundled with this skill. If they are unavailable, resolve the package directory and ref from its installation metadata or the URL/repository location used to load `SKILL.md`. Retrieve those assets from the same directory and ref.
 
 ## Steps
 
@@ -51,7 +46,7 @@ Read `review.diff` in the printed order. Take every `refs` line number from `rev
 
 ### 4. Write judgment.json
 
-Read `template.json` (4 KB). It shows every key in its exact shape. Do not open the full example unless a shape is unclear: `examples/anchor-142/judgment.json` is the quality bar, at 26 KB.
+Read `template.json` (4 KB). It shows every key in its exact shape. Do not open the full example unless a shape is unclear: `examples/invitation-review/judgment.json` shows a complete anonymized invitation review. Its identifiers, links, counts and findings are illustrative; derive the actual review from the current change.
 
 Write the whole file in one go. Caps: 7 decisions, 6 watch, 4 scenarios of at most 12 steps, 12 system nodes, 5 flows of at most 8 steps.
 

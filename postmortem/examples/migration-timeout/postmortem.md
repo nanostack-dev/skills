@@ -5,8 +5,8 @@
 | **Date** | 2026-10-01 |
 | **Severity** | SEV3 |
 | **Status** | In review |
-| **Service** | echopoint |
-| **Authors** | Nanostack engineering |
+| **Service** | application-service |
+| **Authors** | Service engineering |
 | **Duration** | 6m 40s (trigger to resolution) |
 | **Time to detect** | 4m 13s |
 | **Time to mitigate** | ~5m 29s |
@@ -15,11 +15,11 @@
 
 ## Summary
 
-The prod deploy of echopoint `e1fbb08` failed. Migration 000045 renames flow extractor and operator values to snake_case across 10.8k `flow_executions` rows, and it was still running when the app's 15 s start timeout expired. Swarm rolled the service back to the previous image, but the migration had already committed, so `schema_migrations` stayed at version 45 with `dirty=true` and blocked every later deploy. The data was checked by hand, the flag cleared and the deploy rerun, which went live 6m 40s after it started. nanostack-framework v0.15.0 now runs migrations before start, outside that deadline.
+Illustrative anonymized scenario; source links are placeholders. The prod deploy of application-service `e1fbb08` failed. Migration 000045 renames flow extractor and operator values to snake_case across 10.8k `flow_executions` rows, and it was still running when the app's 15 s start timeout expired. Swarm rolled the service back to the previous image, but the migration had already committed, so `schema_migrations` stayed at version 45 with `dirty=true` and blocked every later deploy. The data was checked by hand, the flag cleared and the deploy rerun, which went live 6m 40s after it started. shared-framework v0.15.0 now runs migrations before start, outside that deadline.
 
 ## Impact
 
-No customer saw an error: no client used the old values yet, which is why the rename shipped as one big change. For 6m 40s prod ran the previous image against rows the migration had already renamed, values that image does not know. Echopoint prod deploys were blocked until the dirty flag was cleared.
+No customer saw an error: no client used the old values yet, which is why the rename shipped as one big change. For 6m 40s prod ran the previous image against rows the migration had already renamed, values that image does not know. Application service prod deploys were blocked until the dirty flag was cleared.
 
 - **6m 40s** from prod deploy start to the new image healthy
 - **10.8k** flow_executions rows rewritten by the migration
@@ -28,11 +28,11 @@ No customer saw an error: no client used the old values yet, which is why the re
 
 ## Trigger
 
-The prod deploy job started the new echopoint container. Its start ran migration 000045 inside the fx start hook, which has 15 s to finish.
+The prod deploy job started the new application-service container. Its start ran migration 000045 inside the fx start hook, which has 15 s to finish.
 
 ## Detection
 
-The router's `Deploy echopoint to prod` job failed at 16:39:14 with `context deadline exceeded`, seen by the person watching the deploy. No alert fired: a deploy that rolls back leaves prod serving, so the health checks stayed green.
+The router's `Deploy application-service to prod` job failed at 16:39:14 with `context deadline exceeded`, seen by the person watching the deploy. No alert fired: a deploy that rolls back leaves prod serving, so the health checks stayed green.
 
 ## Resolution
 
@@ -42,15 +42,15 @@ Confirmed the migration had committed in full (no camelCase values left, trigger
 
 | Time | | Event |
 |---|---|---|
-| 16:25:53 | T−9m 08s | **PR #425 merged with migration 000045** snake_case extractor and operator values, one release, no alias for the old values. ([link](https://github.com/nanostack-dev/echopoint/pull/425)) |
+| 16:25:53 | T−9m 08s | **PR #425 merged with migration 000045** snake_case extractor and operator values, one release, no alias for the old values. ([link](https://example.invalid/example-org/application-service/pull/425)) |
 | 16:31:48 | T−3m 13s | **Dev flow suite fails on the first run** The rerun at 16:34:21 passes and the router moves on to prod. Dev's tables are small, so the same migration finished well inside 15 s there. |
 | 16:35:01 | T+0s | **Prod deploy starts, migration runs on start** 10.8k `flow_executions` rows to rewrite inside the 15 s fx start deadline. |
-| 16:39:14 | T+4m 13s | **Prod job fails: context deadline exceeded** Swarm rolls back to the previous image. `schema_migrations` is left at 45 with `dirty=true`. ([link](https://github.com/nanostack-dev/infra/actions/runs/36892442982)) |
+| 16:39:14 | T+4m 13s | **Prod job fails: context deadline exceeded** Swarm rolls back to the previous image. `schema_migrations` is left at 45 with `dirty=true`. ([link](https://example.invalid/example-org/infra/actions/runs/36892442982)) |
 | ~16:40 | T+5m 29s | **Data checked, dirty flag cleared by hand** 0 camelCase rows, triggers enabled, then `UPDATE schema_migrations SET dirty=false WHERE version=45`. |
 | 16:40:47 | T+5m 46s | **Failed prod job rerun** `gh run rerun <router run> --failed` |
 | 16:41:41 | T+6m 40s | **e1fbb08 healthy on prod** The new image boots against the migrated schema in time. The frontend is promoted at 16:41:54. |
-| 17:06:15 | T+31m 14s | **nanostack-framework v0.15.0 merged** Migrations run in `fx.Invoke`, before every `OnStart` and without its deadline. SIGTERM during a migration finishes the current file, then exits. ([link](https://github.com/nanostack-dev/nanostack-framework/pull/43)) |
-| 19:04:04 | T+2h 29m | **echopoint and anchor move to v0.15.0** echopoint #427 and anchor #161. ([link](https://github.com/nanostack-dev/echopoint/pull/427)) |
+| 17:06:15 | T+31m 14s | **shared-framework v0.15.0 merged** Migrations run in `fx.Invoke`, before every `OnStart` and without its deadline. SIGTERM during a migration finishes the current file, then exits. ([link](https://example.invalid/example-org/shared-framework/pull/43)) |
+| 19:04:04 | T+2h 29m | **application-service and identity-service move to v0.15.0** application-service #427 and identity-service #161. ([link](https://example.invalid/example-org/application-service/pull/427)) |
 
 ## Root cause analysis: the five whys
 
@@ -99,9 +99,9 @@ flowchart TD
 ```
 
 - **Problem:** The prod deploy of e1fbb08 failed and rolled back, leaving migration 45 dirty and prod deploys blocked
-  - **Why?** The new container never became ready: fx stopped its start with context deadline exceeded _Evidence: [Deploy echopoint to prod, attempt 2](https://github.com/nanostack-dev/infra/actions/runs/36892442982)_
+  - **Why?** The new container never became ready: fx stopped its start with context deadline exceeded _Evidence: [Deploy application-service to prod, attempt 2](https://example.invalid/example-org/infra/actions/runs/36892442982)_
     - **Why?** Migration 000045 was still rewriting 10.8k flow_executions rows when the 15 s start timeout expired _Evidence: row count from the full prod dump taken before the change_
-      - **Why?** The framework ran migrations in an fx OnStart hook, so they shared the app's 15 s start deadline _Evidence: nanostack-framework before v0.15.0_
+      - **Why?** The framework ran migrations in an fx OnStart hook, so they shared the app's 15 s start deadline _Evidence: shared-framework before v0.15.0_
         - **Why?** That deadline was sized for wiring services, when every migration was a schema change that took milliseconds
           - **Why?** Data rewrites ran inside a time budget meant for app wiring, with no budget of their own → **Root cause R1** (fixed by A1, A3, A6)
       - **Why?** The migration had run on a restored prod dump, but only to check the round trip; its duration was never compared with the deadline _Evidence: the byte-identical up and down check on the restored dumps_
@@ -152,13 +152,13 @@ flowchart TD
 
 | ID | Action | Type | Owner | Due | Status | Ticket | Fixes |
 |---|---|---|---|---|---|---|---|
-| A1 | Run migrations in `fx.Invoke`, before every `OnStart`, without the start deadline | prevent | nanostack-framework | 2026-10-01 | done | [nanostack-framework#43](https://github.com/nanostack-dev/nanostack-framework/pull/43) | R1 |
-| A2 | On SIGTERM during a migration, finish the current file and leave the version clean before exiting | mitigate | nanostack-framework | 2026-10-01 | done | [nanostack-framework#43](https://github.com/nanostack-dev/nanostack-framework/pull/43) | R3 |
-| A3 | Move echopoint and anchor to framework v0.15.0 | prevent | echopoint, anchor | 2026-10-01 | done | [echopoint#427](https://github.com/nanostack-dev/echopoint/pull/427) | R1, R3 |
-| A4 | Log each migration's duration at boot and warn when it passes half of the healthcheck window | detect | nanostack-framework | 2026-10-15 | open |  | R2 |
-| A5 | Time every data migration against a restored prod dump before merge and write the duration in the PR | process | echopoint | 2026-10-15 | open |  | R2 |
-| A6 | Move rewrites that can run past the 90 s healthcheck to a pgqueue backfill job instead of a start-time migration | prevent | echopoint | 2026-10-31 | open |  | R1 |
-| A7 | Ship a contract value change used by live clients over two releases: accept old and new values first, so a rollback stays safe | process | echopoint | 2026-10-15 | open |  | R4 |
+| A1 | Run migrations in `fx.Invoke`, before every `OnStart`, without the start deadline | prevent | shared-framework | 2026-10-01 | done | [shared-framework#43](https://example.invalid/example-org/shared-framework/pull/43) | R1 |
+| A2 | On SIGTERM during a migration, finish the current file and leave the version clean before exiting | mitigate | shared-framework | 2026-10-01 | done | [shared-framework#43](https://example.invalid/example-org/shared-framework/pull/43) | R3 |
+| A3 | Move application-service and identity-service to framework v0.15.0 | prevent | application-service, identity-service | 2026-10-01 | done | [application-service#427](https://example.invalid/example-org/application-service/pull/427) | R1, R3 |
+| A4 | Log each migration's duration at boot and warn when it passes half of the healthcheck window | detect | shared-framework | 2026-10-15 | open |  | R2 |
+| A5 | Time every data migration against a restored prod dump before merge and write the duration in the PR | process | application-service | 2026-10-15 | open |  | R2 |
+| A6 | Move rewrites that can run past the 90 s healthcheck to a pgqueue backfill job instead of a start-time migration | prevent | application-service | 2026-10-31 | open |  | R1 |
+| A7 | Ship a contract value change used by live clients over two releases: accept old and new values first, so a rollback stays safe | process | application-service | 2026-10-15 | open |  | R4 |
 
 ## Responders
 
@@ -169,11 +169,11 @@ flowchart TD
 
 ### Internal
 
-echopoint prod deploy of e1fbb08 failed at 16:39 UTC: migration 000045 outran the 15 s start timeout and left migration 45 dirty. Data verified complete, flag cleared, redeployed and healthy at 16:41. No customer impact. Framework fix in nanostack-framework v0.15.0 (#43).
+application-service prod deploy of e1fbb08 failed at 16:39 UTC: migration 000045 outran the 15 s start timeout and left migration 45 dirty. Data verified complete, flag cleared, redeployed and healthy at 16:41. No customer impact. Framework fix in shared-framework v0.15.0 (#43).
 
 ## Supporting information
 
-- [Router run with the failed and rerun prod job](https://github.com/nanostack-dev/infra/actions/runs/36892442982)
-- [echopoint #425: snake_case values and migration 000045](https://github.com/nanostack-dev/echopoint/pull/425)
-- [nanostack-framework #43: migrations before start](https://github.com/nanostack-dev/nanostack-framework/pull/43)
-- [anchor #161: framework v0.15.0](https://github.com/nanostack-dev/anchor/pull/161)
+- [Router run with the failed and rerun prod job](https://example.invalid/example-org/infra/actions/runs/36892442982)
+- [application-service #425: snake_case values and migration 000045](https://example.invalid/example-org/application-service/pull/425)
+- [shared-framework #43: migrations before start](https://example.invalid/example-org/shared-framework/pull/43)
+- [identity-service #161: framework v0.15.0](https://example.invalid/example-org/identity-service/pull/161)
