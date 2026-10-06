@@ -20,6 +20,11 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
 
 ## Skills
 
+- [`agent-workflow`](agent-workflow/SKILL.md) — implement features with affected-area
+  E2E verified locally before pushing and CI as the complete final gate; cloud
+  agents without local runtime access continue through CI with a top-of-PR warning
+  and a concrete access request. Uses each project's guides, including Anchor and
+  Echopoint.
 - [`feature-review`](feature-review/SKILL.md) — complete browser feature review
   with mobile, tablet and desktop E2E checks, inspected screenshots, independent
   validation and readable PR videos, while keeping ordinary tests fast.
