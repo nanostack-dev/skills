@@ -29,11 +29,10 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
   validation and readable PR videos, while keeping ordinary tests fast.
 - [`real-world-examples`](real-world-examples/SKILL.md) — ground explanations,
   comparisons, and recommendations in concrete real-world examples.
-- [`flow-suite-testing`](flow-suite-testing/SKILL.md) — end-to-end API testing
-  with echopoint flows: the authoring loop, designing a flow as a branching graph
-  rather than a chain, reusing organization and flow variables instead of
-  hardcoding, verifying side effects at the third party, and keeping assertions
-  in step with a status change.
+- [`flow-suite-testing`](flow-suite-testing/SKILL.md) — API testing with workflow
+  graphs: discover the engine's capabilities, design dependencies and reliable
+  cleanup, reuse scoped variables, verify external effects and emitted events,
+  and keep contract assertions aligned with the API.
 - [`change-map`](change-map/SKILL.md) — turn a PR or in-progress branch into an
   picture-first review page: system diagram, decisions to approve, animated
   scenarios, lifecycle, ER schema, tests as Given/When/Then, and the noise split.

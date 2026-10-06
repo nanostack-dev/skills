@@ -1,444 +1,192 @@
 ---
 name: flow-suite-testing
-description: End-to-end API testing with echopoint flows — the authoring loop, designing a flow as a branching graph rather than a chain, reusing organization and flow variables instead of hardcoding, storing anything that authenticates as a secret, verifying side effects at the third party, checking every event a feature emits with one final webhook wait, and running suites by tag on the ephemeral runner. Use this whenever you author, edit, or debug an echopoint flow that tests an API, whenever you add a test touching an external service or needing a URL, account, or key, whenever a flow carries an API key, token, password or signing secret, whenever a feature under test emits webhooks or events, whenever you change an HTTP status or error code in an API that flows assert on, and whenever a flow suite fails in CI. A flow written as a straight line, a literal that should have been a variable, and a credential stored in plain text are the three most common defects in these suites.
+description: Author, edit or diagnose API tests expressed as workflow graphs. Use for dependency and cleanup design, external side effects or events, environment and secret inputs, API status changes, and flow-suite failures.
 ---
 
 # Flow suite testing
 
-An echopoint flow is a graph of HTTP request nodes with assertions. A suite of them is a black-box
-end-to-end test of an API: it runs against a deployed environment, over the real network, using the
-same interface a customer would.
+A flow suite tests API behavior through requests, assertions and their dependencies.
+Its definitions may live in the repository, a remote service or both. Discover the
+actual source of truth: a passing application build may never inspect these tests.
 
-The flows are stored in echopoint, not in the repository of the service they test. That is the fact
-everything else here follows from. Nothing in the service's build sees them, so no compiler, linter,
-or unit test will tell you that a change broke one.
+Use the project's documented local and CI gates. For affected-area selection and
+an unavailable local runtime, follow [agent-workflow](../agent-workflow/SKILL.md).
 
-## Run a suite
+## Discover the repository and engine
 
-```
-echopoint flows run --tag <tag> --environment <env>
-```
+Read the repository's agent guides, test documentation, scripts, engine version,
+schemas and supported management interfaces. Identify:
 
-`flows run` uses the **ephemeral runner**: no cloud runner, no CI job, no deploy. Run it whenever you
-want the answer, including before you push.
+- Existing suites, their selection rules and the definitions each gate executes.
+- The authorized test runtime, organization or tenant, environment and credentials.
+- Setup dependencies, execution reports, cleanup ownership and external fixtures.
+- Supported graph, assertion, variable, polling and event-collection capabilities.
 
-- `--tag` selects by tag, repeats, and takes `--match-mode any|all`. Tag flows by the service or
-  feature they cover so a suite is one command.
-- `--environment` names the environment overlay to apply.
-- `--verbose` prints each node's name, status, and duration — the fastest way to see whether a
-  fan-out is actually running concurrently.
-- `--parallel N` runs N flows at once. Leave it at 1 while diagnosing.
-- One flow: `echopoint flows run <flow-id> --environment <env>`.
-- `echopoint flows validate <id>` is the static check — dangling edges, unreachable `{{node.x}}`
-  references, cycles. It needs no environment.
-- `flows list` has **no** `--tag` flag. Only `run` and `tag` take tags.
-- `--profile <name>` picks which stored credential and organization to use. See **Organizations**.
+Engines differ in syntax and execution semantics. Use only capabilities verified
+in the current tool's help, schema, documentation or source. When binding an
+unfamiliar engine or version, read [capability discovery](references/capability-discovery.md).
+Record actual commands in the project guide; this skill supplies no universal CLI.
 
-In CI, the `nanostack-dev/echopoint-cli` action runs the same thing. A workflow that takes a tag as
-an input lets anyone run a suite on demand without a deploy.
+Confirm the resolved identity, tenant and environment before a mutation. Use
+explicit scope selection wherever supported. An unexpected authorization error
+or missing resource calls for checking that scope, rather than trying identities
+until something succeeds. Work within the task's authorization and use disposable
+fixtures; changes to shared variables or imported resources retain their existing
+authorization requirements.
 
-## The authoring loop
+## Author and execute
 
-Work this loop for any new or changed flow. Steps 1 and 4 are the ones people skip, and both are
-cheap.
+1. **Survey.** Find a suite to extend, reusable request definitions and existing
+   variable names. Locate every active copy or deployed revision used by the
+   affected gates. Finish with a known source of truth and execution target.
+2. **Design.** Sketch setup, independent branches, observations and cleanup before
+   adding nodes. Identify each dependency and each owned resource to remove.
+3. **Build.** Use the engine's supported editor, CLI, API or import schema. Give
+   nodes stable, readable identifiers and names that agree with their assertions.
+   Preserve unrelated fields when updating a definition.
+4. **Validate.** Use available static validation to check references, dependencies,
+   required inputs and unsupported graph shapes. Static success is a prerequisite,
+   not execution evidence.
+5. **Run.** Execute the affected suite on the intended source and scope, with setup
+   enabled. Confirm the actual selected flows and evaluated cases. Read node
+   outcomes, skipped dependencies and cleanup results, not just the suite summary.
+6. **Diagnose.** Separate product assertions from setup, provider and runner failures.
+   Repair the demonstrated cause and rerun the affected selection without weakening
+   its assertions or hiding the failing case.
+7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
+   cleanup independently. For a new or reshaped concurrent graph, use additional
+   runs to exercise ordering variation. Repeated passes sample races; they do not
+   prove their absence.
+8. **Connect the gate.** Register the flow through the project's supported suite
+   selection and synchronize authorized copies where needed. Verify that current
+   CI actually selects the changed definitions.
 
-**1. Survey what already exists.** Before writing a single node:
+Completion records the tested source, engine version, resolved scope, selection,
+expected and actual outcomes, repeat runs, cleanup and remaining boundaries.
+Separate passed, failed, skipped and unevaluated cases. Discovery, validation and
+an accepted launch are distinct from a completed execution.
 
-```
-echopoint flows list                  # is there already a flow for this feature?
-echopoint org env get                 # which environments and variables exist
-echopoint flows env get <flow-id>
-echopoint collections list            # third-party specs already imported
-```
+## Dependencies describe reality
 
-You are looking for a flow to extend rather than duplicate, variable names to reuse rather than
-invent, and a collection that already describes the third party. See **Variables** — this step is
-what stops literals from being baked in.
+A chain claims that a later step needs an earlier result. Ask: does the later
+step read that output or observe state the earlier step changed? If so, order
+them. Otherwise, attach both to their shared prerequisite when the engine
+supports independent branches.
 
-**2. Design the graph before building it.** Decide the setup chain, the branches, and the fan-in.
-Write it down, even as three lines of text. Moving an edge on paper is far cheaper than after twelve
-nodes exist. See **Design the flow as a graph**.
-
-**3. Build the nodes.** Logical ids, `--after` pointed at the fan-out node, and an assertion and a
-display name that agree with each other.
-
-**4. Validate statically.** `echopoint flows validate <id>` catches dangling edges, unreachable
-`{{node.x}}` references, and cycles without touching an environment. Run it before the first real
-run — it turns a slow failed run into an instant message.
-
-**5. Run it.** `echopoint flows run <id> --environment <env> --verbose`. The verbose start order is
-how you confirm the fan-out runs concurrently rather than in the order you happened to add nodes.
-
-**6. Read the failures and go back to step 3.** The node line, not the flow line. A long `Skipped`
-list means the shape is wrong, not the node — fix the shape first.
-
-**7. Run it twice in a row.** A flow that passes once and fails the second time did not clean up
-after itself, and it will fail for the next person instead. This is the check that catches a fixed
-literal where a generated value belonged. Two greens prove cleanup, not ordering: run a new or
-reshaped branchy flow three times before it joins a CI tag, since a race between siblings depends
-on which request lands first.
-
-**8. Tag it, and mirror it wherever the suite lives.** A flow nothing selects is a flow nobody runs.
-
-## Design the flow as a graph, not a line
-
-This is where flow tests are usually got wrong, so spend your thinking here rather than on node
-count. The instinct when adding a case is to hang it off the last node you added. Do that a few
-times and you have `setup → case 1 → case 2 → case 3 → cleanup`: a chain that *claims* case 2
-depends on case 1. It almost never does.
-
-**A chain is a claim about dependency. Make it only when the claim is true.**
-
-The engine runs every node whose predecessors have finished, concurrently. So the shape you draw is
-the parallelism you get, and drawing a line throws it away. But speed is the smaller loss. The real
-cost is diagnosis:
-
-> **A failed node marks everything downstream `Skipped`.**
-
-One real failure in a chain of eight hides the other seven. From a real run of a products flow:
-
-```
-Node Create 1-char Name (400) failed: assertion 0 failed: status_code equals expected=400 actual=409
-Node Search Products      failed: Skipped because step "Create 1-char Name (400)" failed earlier
-Node Update Empty Name    failed: Skipped ...
-Node Update Product       failed: Skipped ...
-Node Create Duplicate     failed: Skipped ...
-Node Get Product          failed: Skipped ...
-Node Delete Product       failed: Skipped ...
-Node Verify Gone (404)    failed: Skipped ...
+```text
+                         +-- read -> update -> verify
+setup and baseline ------+-- duplicate-case assertion
+                         +-- permission-case assertion
+                         +-- other independent cases
+all finished branches --------> observations -> cleanup -> verify removal
 ```
 
-Eight nodes, one genuine result, seven unknowns — and the cleanup never ran, so the run leaked its
-fixtures. Those seven cases are independent: none reads an output of `Create 1-char Name`. Hung off
-`setup` instead, that run would have reported all eight verdicts at once and still cleaned up.
-
-Chains turn each run into one bit of information. Branches give you the whole feature per run: a
-failure skips only the nodes downstream of it (`dependency_failed`, naming the failed step), and
-every other branch still runs to its verdict (runner v0.63+). Before that, the first failure skipped
-every node that had not started, which is why older flows wire known-bug checks last; that ordering
-is no longer needed.
-
-### The shape to reach for
-
-```
-                  ┌── happy path: get → update → delete → verify-gone (404)
-                  ├── duplicate name (409)
-   setup ─────────┼── empty name (400)                                    ──────► cleanup
-   (log in,       ├── name too long (400)                                  (run-when always)
-    create the    ├── unauthorized (401)
-    fixtures)     └── missing permission (403)
-```
-
-- **Setup is a genuine chain.** Log in, create the parent resource, mint a key — each really does
-  need the one before. Keep it linear and as short as it can be.
-- **Every case is a branch off setup.** Independent cases are siblings, never a queue.
-- **A branch may itself be a short chain** when the steps are truly ordered:
-  `get → update → delete → verify-gone` is a real sequence, because each reads the last one's
-  effect. That is one branch, not four.
-- **Cleanup fans in.** Give it `--run-when always` and an edge from every branch, so it runs even
-  when a branch fails and the run does not leak fixtures. It runs whenever the ids it references
-  exist: a create node that fails an assertion still hands its outputs on, so
-  `DELETE /widgets/{{create-widget.widgetId}}` still fires. Only a create that got no id back skips
-  its cleanup.
-- **A check may follow cleanup.** `delete (always) → verify-gone (404)` works: an on_success node
-  after an always node runs in the always phase once its predecessors succeeded.
-- **Withdraw what outlives its owner before deleting the owner.** A public projection (a published
-  page, a shared link) can stay readable after its organization is deleted, so the cleanup chain
-  unpublishes first (`--run-when always`, accepting the "already withdrawn" status too) and deletes
-  the organization after it.
-- **A replay needs the same key in two nodes.** To prove an idempotency key (`command_id`,
-  `Idempotency-Key`) replays, send a value both nodes read from one upstream output, such as the
-  UUID id of a resource this run created: `{{push-major.id}}` in the first request and its retry.
-
-### The test for "chain or branch?"
-
-Ask of any two nodes: **does B read an output of A, or observe state that A changed?**
-
-- Yes → chain them. `verify-gone` must follow `delete`.
-- No → they are siblings. Hang both off the common ancestor.
-- **A count reads every write in its scope.** A node asserting a total or an empty list
-  (`$.total equals 0`) observes every node that creates in that scope, so it runs before all of
-  them, including a branch added later for an unrelated case
-  ([postmortem](../docs/postmortems/2026-10-05-specs-flow-count-race.md)).
-- **A read of a projection polls.** Search results, usage totals and other views that a background
-  job builds after the write commits lag the write by a moment, so a node asserting on them right
-  after the create races that job. Wait through a `poll` node: one poll until the new resource
-  appears, then plain assertion nodes after it
-  ([postmortem](../docs/postmortems/2026-10-06-specs-search-indexing-race.md)).
-
-Negative cases are the easiest call: they assert a 4xx and change nothing, so they can essentially
-always be siblings. Five validation cases in a row are five branches.
-
-### Where chains creep in
-
-`flows node add --after <node>` wires a success edge for you, which is a real convenience — and it
-is also how a chain forms without anyone deciding to build one, because the node you just added is
-the one nearest to hand. **Point `--after` at the fan-out node, not at your previous node**, unless
-you actually mean "after that specific step". Naming the fan-out node something obvious (`setup`)
-makes the right target easy to reach for.
-
-### When a branch genuinely cannot be parallel
-
-Two branches that mutate the same row must be ordered, or they race. Prefer giving each branch its
-own fixture — create two resources rather than sequencing two renames of one. Separate fixtures
-scale to any number of cases; sequencing does not, and it re-introduces the chain you were avoiding.
-
-### One flow per feature
-
-Prefer one flow covering a whole feature through many branches over many small single-case flows. A
-feature flow pays for its setup once, reports every case in a single run, and cleans up in one
-place. Split only when a case needs a genuinely different setup.
-
-## Variables: look before you hardcode
-
-A `{{name}}` that is not a node output is a **variable**, and the runner resolves it from three
-places. Knowing which one to use is most of the skill here.
-
-| Scope | Command | Use it for |
-|---|---|---|
-| Organization variables | `echopoint org env get` / `set` | anything every flow in the organization shares — base URLs, a CI credential, a standing test account |
-| Flow variables | `echopoint flows env get/set <flow-id>` | a value only this flow needs, or one that must differ from the organization default |
-| Flow input | none — it is inferred | any `{{name}}` still unresolved at launch |
-
-An **environment** is a named overlay such as `dev` or `prd`, and nothing else — it is what
-`--environment` selects. The container holding the base variables and its overlays is a **variable
-set**. A flow-level value wins over the organization's for the same name. Anything left unresolved
-becomes a required input and the launch fails with `unknown initial variable`, rather than sending a
-request with an empty string — an unresolved reference is loud, not silent.
-
-An environment has to exist before you can write into it: `echopoint org env environments create
-<name>`. A misspelled `-e` fails with a 404 rather than quietly creating an overlay nothing reads.
-
-**Survey before you invent.** If the organization already defines a base URL, a test account, or an
-API key, use that name. Writing `https://api.example.com` into a node is not wrong today; it is
-invisible on the day the host changes, and it makes the flow unrunnable against any other
-environment. Run `org env get` first and reuse what is there.
-
-**Reuse silently, create with permission.** If the value you need already has a name, use it — no
-need to ask, and asking about an existing base-URL variable is noise. If you are about to bake in a
-literal that clearly *should* be a variable — a host, an account, a key, anything
-environment-shaped — say so and offer to add it, naming the scope you would put it in and why. An
-organization variable is shared state that outlives your flow and affects everyone else's, so
-creating one is the user's call, not a side effect of writing a test.
-
-**A value that varies per run is not a variable — it is a generator.** `{{$email}}`, `{{$slug:3}}`,
-`{{$int:1:100}}`, `{{$uuid}}` come from the runner's own namespace and differ every execution. Reach
-for these for anything a test creates. A fixed name in a create request is the leading cause of a
-flow that passes once and collides forever after.
-
-## Anything that authenticates is a secret
-
-A variable can be stored as a secret, and anything that authenticates **must** be:
-
-```
-echopoint org env set --secret --var API_KEY=sk-live-...
-echopoint flows env set <flow-id> --secret --var SIGNING_KEY=...
-```
-
-API keys, bearer tokens, passwords, signing keys, session cookies, client secrets, database URLs
-with a password in them, webhook signing secrets. If it would let someone act as you, it is a
-secret. A base URL is not; an account email on its own is not.
-
-A secret is encrypted at rest, a read never returns its value, and the runner replaces it with
-`***` in node results, progress events, and flow exports. That last part is the reason this matters
-for flows specifically: a request node reports the URL, headers and body it actually sent, so a
-token interpolated into an `Authorization` header lands in the stored execution result. Stored as a
-secret it is masked there. Stored plain it is not, and every execution keeps a copy.
-
-**Set it as a secret the first time.** Plain to secret is allowed and the reverse is refused — the
-service returns `SECRET_VARIABLE_CANNOT_BECOME_PLAIN` — so a value that goes in plain has already
-been written to every execution result that used it. Turning it into a secret afterwards protects
-future runs, not past ones. Rotate the credential as well as flipping the flag.
-
-`env get` shows names only; `--show-values` reveals plain values and prints `<secret>` for a secret,
-because a read cannot return one. Type `--show-values` deliberately rather than by habit; surveying
-never needs it. Whatever you do reveal, do not paste it into a pull request, an issue, a commit, or
-a chat message.
-
-## One assertion, one cause
-
-An assertion that can pass for two different reasons tests neither. Two real examples, both green
-for a long time, both exposed only when an API split one 400 into 400 and 409:
-
-- a duplicate-create node sent a **truncated payload**, so validation refused it before the
-  duplicate check ran — it asserted "duplicate → 400" while measuring "invalid body → 400";
-- a node asserted a minimum-name-length rule that did not exist, and passed only because a leftover
-  fixture made every run collide instead.
-
-When you write a negative node, make everything except the one condition under test valid, and give
-it a fixture the run creates itself. If a node's premise depends on data a previous run left behind,
-it is not a test. The `{{$...}}` generators exist for exactly this.
-
-## Verify the effect at the third party
-
-When the feature under test writes to a third party — a payment provider, an identity provider, a
-mail relay, a repository host — your API answering `201` proves only that it accepted the request.
-It does not prove anything arrived. If the feature's whole job is to put data somewhere else, a test
-that stops at your own response is testing the handler, not the feature.
-
-So add a node that reads the record back **from the third party** and asserts on it. That node is a
-branch off the one that caused the side effect, and it is usually the most valuable node in the
-flow: it is the only one that would catch a silently dropped field, a wrong id mapping, or a
-provider that accepted the call and did nothing.
-
-**Import the third party's OpenAPI spec so you have real requests to send.** Echopoint turns a spec
-into a collection of request definitions a flow can call:
-
-```
-echopoint collections import --file <spec.yaml> --name "<API name>"
-```
-
-Check `echopoint collections list` first — a shared organization often already has the common ones.
-
-**Offer this when the situation calls for it.** If you are authoring or extending a flow for a
-feature that talks to a third party, and no collection for that API exists yet, say so and ask
-whether to import it, pointing at the vendor's published spec. Most vendors publish one, and it is a
-minute of work that upgrades every future test of that integration. Do not import silently — it adds
-a shared resource to the organization, so it is the user's call.
-
-Three things to keep in mind:
-
-- **Credentials belong in an environment**, never in a node body — see **Variables**. A vendor key
-  is organization-scoped if several flows call that vendor, flow-scoped if only one does.
-- **Confirm the effect; do not test the vendor.** One read-back assertion on the fields you wrote is
-  the goal. Exercising the third party's own behaviour makes the suite slow and flaky for no return.
-- **Some effects are not readable, and that is a legitimate skip.** Delivery of an actual email is
-  the standing example — confirming it needs a live relay and a mailbox. Prefer asserting the record
-  you control (the send record, the webhook event row) and say plainly in the flow what is not
-  covered.
-
-## Check the events a feature emits with one final webhook wait
-
-When the API under test emits events (webhooks, Standard Webhooks, an outbox), point its event
-endpoint at `{{webhook.url}}` during setup. Launch gives every run its own webhook, so the run only
-sees its own events. Then check them all in **one webhook wait at the end of the flow**, not one
-wait per event.
-
-```
-   setup ──► create A ──► update A ──► accept A ─┐
-   (event    ├─► create B ──► resend B ──────────┼──► events (webhook wait, run_when always) ──► cleanup
-   endpoint  └─► create C ──► delete C ──────────┘
-   = {{webhook.url}})
-```
-
-The wait holds **expected events**: each is a name over a group of checks, and all of a group's
-checks must pass on one event.
-
-```
-echopoint flows node add <flow> --id events --type webhook_wait --name "Every invitation event" \
-  --timeout 30000 --settle 3000 --run-when always --after accept-a --after resend-b --after delete-c
-
-echopoint flows node expect add <flow> events --name "Resent with a new token" \
-  --match '$.type equals organization.invitation.updated' \
-  --match '$.data.invitation_id equals {{create-b.id}}'
-
-echopoint flows node expect add <flow> events --name "Accepted once" --once \
-  --match '$.type equals organization.invitation.accepted' \
-  --match '$.data.invitation_id equals {{create-a.id}}'
-
-echopoint flows node expect add <flow> events --name "No accept after delete" --never \
-  --match '$.type equals organization.invitation.accepted' \
-  --match '$.data.invitation_id equals {{create-c.id}}'
-
-echopoint flows node assertion add <flow> events --extractor header --header-name webhook-signature \
-  --operator starts_with --value "v1,"
-```
-
-Rules that make this a real test:
-
-- **Tie every expected event to its resource with a template** (`{{create-b.id}}`). A check on
-  `$.type` alone passes on any event of that type. It cannot tell an update of A from a resend of
-  B, which is exactly the bug a missing resend event hides behind.
-- **One event counts for one expected event.** Two expected events with the same checks need two
-  events. Events go to expected events oldest first, in the order they were added, so add the
-  specific ones before the broad ones.
-- **Prove what must not happen** with `--never` or `--once`, and give the wait a `--settle` window
-  (a few seconds) so a late extra event is still seen.
-- **The node's own assertions run on every claimed event**: the signature header, and that no
-  secret leaks (`--extractor body --operator not_contains --value <token prefix>`).
-- **A check on the request URL** reads a query param: `--match 'query:q equals x'`, or
-  `--extractor query_param --param-name q` on the node's assertions.
-- **Extractor and operator names are snake_case** (`json_path`, `status_code`, `not_contains`,
-  `greater_than_or_equal`). A camelCase name is rejected.
-- **`--run-when always`**, with an edge from every trigger branch. A branch that failed then
-  leaves only its own expected events `not evaluated`; the rest are still judged.
-- Read a failure from the node result: each expected event has a verdict, and one that found
-  nothing names the **closest** request with each check's expected and actual value.
-
-A webhook wait without expected events waits for the first request that passes its assertions.
-Keep that for a flow that must pause on one callback before its next step, not for checking
-events.
-
-## Organizations
-
-Flows belong to an organization. Teams commonly keep a separate organization for CI so that a broken
-hand-run cannot affect the pipeline, which means **the same flow exists more than once, with a
-different id in each**. Fixing one copy does not reach the other.
-
-`echopoint profile list` shows the stored profiles; `echopoint auth status --profile <p>` prints the
-organization one resolves to. A flow id that answers 404 under one profile is not missing — try the
-other. Apply every change everywhere the flow lives, and re-run each.
-
-## Before you change a status, a code, or a contract
-
-These assertions are the only consumer of your API's error statuses with **no compile-time check**.
-A status change passes the build, the linter, and every unit and integration test, then fails the
-flow suite — often after the service is already deployed.
-
-In the same change that moves a status:
-
-1. Find the `status_code` assertions on the affected route, in every organization the suite lives in.
-2. Update the assertion **and** the node's display name — names carry the status, so a node reading
-   `Duplicate Slug (400)` becomes `Duplicate Slug (409)`.
-3. Re-run the tag everywhere.
-
-Which status is *correct* is your API's own convention. This skill covers only keeping the suites in
-step with it.
-
-## Authoring mechanics
-
-Build flows through the CLI (`flows node add`, `flows edge add`, `--after`), not by hand-writing
-JSON. `flows update --file` takes an `UpdateFlowRequest` and merges field by field, so sending only
-`flow_definition` leaves name, tags, and folder untouched — the safe way to script an edit.
-
-- **Node ids are logical**, not UUIDs: `create-product`, `dup-create`, `login-badpass`. Templates
-  read `{{create-product.productId}}`, and runner errors name the failing node.
-- **Display names carry the expected status** in parentheses. Keep them true; a name disagreeing
-  with its assertion is how a stale suite hides.
-- Any node can read any upstream node's output — `{{nodeId.key}}` reaches across branches, so a
-  fan-out costs nothing in wiring.
-- **Assertion values take templates too**: `$.id equals {{create-product.productId}}` checks the
-  read-back returns the resource this run created, not just a 200 (runner v0.62+). Prefer it over
-  prefix or name matching. A reference no upstream node produces is rejected by `flows validate`.
-- Tags are at most 20 characters and an organization holds at most 100 distinct tags, so a per-run
-  tag (`epsched-{{$runId}}`) must be deleted with its fixture.
-- Modules are reusable sub-flows and nest several levels: a child exports with
-  `--output name=childNode.key` and the parent reads `{{moduleNode.name}}`. Give a module a name
-  that marks it as one, and keep it out of suite runs — it owns no cleanup of its own.
-- A `poll` node's body sees only flow inputs, so a poll that reads this run's resources lives in a
-  module whose `input_bindings` pass node outputs (`{{create-spec.slug}}`). Bind outputs, not
-  generators: a `{{$runId}}` in a binding resolves with the child's run id. The poll's assertions
-  read `$["probe.items"]`; JSONPath stops at that output, and `contains` is a substring check on
-  its text, so assert `$["probe.items"] contains {{probeSlug}}`.
-- **A literal `{{` in a request goes through a flow variable.** A body that must carry the API's
-  own template syntax (an email body with `{{if .name}}`) would be read as a flow reference. Store
-  that text as a flow variable (`flows env set <id> --var BODY='<p>{{if .name}}…</p>'`) and send
-  `{{BODY}}`: a variable's value is substituted once and not scanned again.
-- Run `flows validate <id>` after wiring and before the first real run.
-
-## When a suite fails
-
-Read the node line, not the flow line: a flow reports its first failure and marks everything
-downstream `Skipped`, so the real cause is the one node with an `assertion N failed` message.
-`expected=X actual=Y` tells you which side moved. Decide which is wrong — the service or the
-assertion — and fix that one. Never relax an assertion to make a run green.
-
-When the service is wrong and the fix is not shipping with this change, do not leave the node red in
-a suite that gates a deploy, and do not weaken it. Move the reproduction into a
-`<product>: known bugs` flow tagged `known-bugs`, which no CI tag selects, and say in its description
-which flow the check returns to once the fix lands. The bug stays recorded; the deploy gate stays
-meaningful.
-
-If the `Skipped` list is long, that is the flow telling you it is a chain. Fixing the shape is
-usually worth more than fixing the one node, because the next failure will hide the same seven cases
-again.
+This is a dependency sketch, not an engine definition. Discover whether failed
+ancestors skip only their descendants, abort unrelated branches, or cancel the
+entire run. Verify the actual scheduling in execution reports; drawing branches
+alone does not establish concurrency.
+
+- Keep setup short and ordered where identity or resource creation requires it.
+- Give independent mutations separate fixtures. Two branches editing the same
+  record need explicit ordering or separate records.
+- Make all other input valid in a negative case, so its assertion identifies one
+  cause. A duplicate case must reach the duplicate rule, not fail body validation.
+- Check baseline totals or empty lists **before every write in their scope**.
+  Adding an unrelated writer later can invalidate that ordering. Post-write totals
+  depend on all relevant writes; isolate the scope or assert a verified delta.
+- Poll asynchronous projections with a bounded deadline and a precise condition
+  tied to this run's resource. Search indexes and usage views may lag a committed
+  write. Once the projection is ready, dependent assertions can share that result.
+
+## Cleanup survives failure
+
+Track owned resources as soon as creation yields an identifier, including when a
+subsequent assertion fails. Cleanup waits for all relevant branches and uses the
+engine's verified always/finally behavior. Confirm how it behaves after setup
+failure, cancellation and skipped dependencies; an ordinary success edge is not
+a guarantee that cleanup runs.
+
+If the engine cannot provide reliable cleanup for those outcomes, use the
+project's owned external teardown or resource ledger. Remove only this run's
+resources. Withdraw public projections or independently surviving artifacts
+before deleting their owner when the application's lifecycle requires that order.
+Accept already-removed states only where the API contract makes them safe.
+
+Verify removal through supported read-back or listing APIs and report cleanup
+failure even when assertions passed. Reusing one generated idempotency key across
+a request and its replay should leave the expected single effect; generating a
+different key for each request tests two creations instead.
+
+## Variables, generators and secrets
+
+Survey existing configuration before introducing literals or new names. Base URLs,
+standing accounts and environment-dependent settings belong in the project's
+configuration scopes. Discover precedence between shared, flow, environment and
+launch inputs; verify how unresolved values fail before sending requests.
+
+A generator produces data that varies per run. Use it for disposable names,
+addresses and correlation identifiers. Generate once and pass the resulting value
+when several nodes need the same identity. Re-evaluating a generator in a child
+flow or another node may produce a different value. Bind parent outputs explicitly
+when the engine supports modules or subflows.
+
+Credentials belong in supported secret storage or secure launch inputs. Verify
+storage, access and redaction behavior rather than assuming every engine encrypts
+values or masks results. Inspect request URLs, headers, bodies, progress events,
+errors, traces and exports for leakage before sharing evidence. Survey names and
+metadata without revealing values. Keep credentials out of command arguments,
+definitions, commits, PR text and chat; use authorized secure provisioning paths.
+
+If a credential was already retained in plain execution data, protecting future
+inputs does not remove those copies. Record the exposure and use the project's
+authorized removal and rotation procedure. Discover interpolation and escaping
+rules when a payload itself contains template syntax; a variable value is not
+universally exempt from another expansion pass.
+
+## Verify external effects and emitted events
+
+An accepted API response proves acceptance. When the feature writes elsewhere,
+read back the affected record through the external system's supported interface
+and assert the resource identity and fields the feature wrote. Use a bounded wait
+for asynchronous effects. Reuse existing request definitions or import a schema
+through the project's authorized workflow when supported. Test the integration's
+effect, rather than unrelated behavior of the external system.
+
+If the effect cannot be observed with available authorized access, state the exact
+coverage boundary. A local send record does not prove delivery to the recipient.
+
+For emitted events, arrange an isolated capture endpoint or equivalent collector
+during setup. Fan in from every triggering branch to a final bounded observation
+before cleanup. Use a verified always/finally path where supported so one failed
+branch does not conceal unrelated event outcomes.
+
+- Correlate each expectation with this run's resource and action, not event type
+  alone. Check important payload fields and relevant authentication metadata.
+- Ensure one event cannot satisfy two distinct required occurrences. Verify the
+  matcher's consumption rules or implement a supported explicit matching check.
+- Assert required, forbidden and duplicate events according to the actual delivery
+  contract. Account for retries and event identifiers when deduplication matters.
+- Use a documented observation/settling window for absence or extra-event checks.
+  Seeing the first expected event does not establish that no later event arrives.
+- Keep pending, missing and unevaluated expectations distinguishable from passes.
+  Inspect individual matches and mismatches in the final result.
+- Verify payload and diagnostics redaction before publishing captured events.
+
+Use a single final collector for a set of independent emitted events when the
+engine supports it. An intermediate callback that is a prerequisite for the next
+action is a genuine dependency and may need its own wait.
+
+## Keep contract assertions current
+
+When a status, error code or response contract changes, locate its assertions in
+all selected definitions and authorized tenant/environment copies. Update the
+assertion and any display name that embeds the expected outcome in the same
+change. Re-execute the affected suites on each required target and verify CI
+coverage. The API contract determines the correct status; this skill keeps its
+consumers aligned.
+
+Read the earliest causal failure and its expected/actual evidence. A long skipped
+tail may expose false dependencies, but setup failure or the engine's cancellation
+policy can produce the same symptom. Fix the demonstrated graph or product issue.
+Keep a reproduced defect and its assertion visible; use the project's documented
+known-failure policy if one exists, rather than silently removing it from the gate.
