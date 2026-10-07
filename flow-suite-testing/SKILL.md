@@ -94,6 +94,8 @@ alone does not establish concurrency.
 - Check baseline totals or empty lists **before every write in their scope**.
   Adding an unrelated writer later can invalidate that ordering. Post-write totals
   depend on all relevant writes; isolate the scope or assert a verified delta.
+  Before adding a write to an existing flow, list that flow's counts in the
+  write's scope and update each one in the same edit.
 - Poll asynchronous projections with a bounded deadline and a precise condition
   tied to this run's resource. Search indexes and usage views may lag a committed
   write. Once the projection is ready, dependent assertions can share that result.
