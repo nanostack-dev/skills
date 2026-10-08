@@ -8,6 +8,8 @@ Public skill library. Two ways to use it:
   that cannot access the local `~/.claude/skills/` filesystem or attach
   plugins.
 
+For independent maintenance, start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md) and [the documentation index](docs/README.md).
+
 ## Usage
 
 Point a cloud worker prompt at the raw `SKILL.md` URL, same pattern as the

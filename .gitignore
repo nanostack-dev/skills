@@ -4,3 +4,6 @@
 worktrees/
 __pycache__/
 *.pyc
+
+# Developer-specific agent permissions and settings.
+/.claude/settings.local.json
