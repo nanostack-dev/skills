@@ -67,6 +67,13 @@ repository conventions. Confirm that CI actually selects the new tests and runs
 the complete required gate, including setup and cleanup. Keep source checks and
 application E2E results distinct when they are separate workflows.
 
+Before opening and again before merging, read `git diff --stat origin/main...HEAD`
+and match every touched path to the PR's stated scope. Unintended deletions mean the
+branch was built from a stale tree: rebase and recommit from current `origin/main`,
+then re-check. After the merge, confirm the deploy reached the first environment
+before stacking further merges on it
+([postmortem](https://claude.ai/artifact/QYZEjvL4x5vhfBhyC9ntip)).
+
 Wait for the results on the current PR head. For a product failure, reproduce it
 locally in the affected area, repair it, rerun the local selection and then push.
 For a runner or provider failure, retain its evidence and retry only after a
