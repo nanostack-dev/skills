@@ -50,7 +50,10 @@ authorization requirements.
 5. **Run.** Execute the affected suite on the intended source and scope, with setup
    enabled. Confirm the actual selected flows and evaluated cases. Read node
    outcomes, skipped dependencies and cleanup results, not just the suite summary.
-6. **Diagnose.** Separate product assertions from setup, provider and runner failures.
+6. **Diagnose.** Separate product assertions from setup, provider, runner and
+   shared-quota failures. A rejection by a limit other callers also spend (a rolling
+   launch budget, a rate limit) is a platform cause: read its scope from the error,
+   count the quota's other consumers in the window, and fix the contention.
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
