@@ -21,6 +21,8 @@ schemas and supported management interfaces. Identify:
 - The authorized test runtime, organization or tenant, environment and credentials.
 - Setup dependencies, execution reports, cleanup ownership and external fixtures.
 - Supported graph, assertion, variable, polling and event-collection capabilities.
+- The engine version each gate executes on. A runner embedded in a CLI can lag the
+  server's hosted runner; test new engine semantics on the runner that ships them.
 
 Engines differ in syntax and execution semantics. Use only capabilities verified
 in the current tool's help, schema, documentation or source. When binding an
