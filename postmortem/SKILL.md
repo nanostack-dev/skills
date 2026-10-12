@@ -19,7 +19,7 @@ You write one file, `postmortem.json`. `scripts/build.py` checks it and writes t
 |---|---|---|
 | `postmortem.json` | you | facts, timeline, the whys tree, actions (shape: `template.json`) |
 | `postmortem.md` | `build.py` | the document to commit or paste: tables, the whys as a nested list, the Mermaid diagram |
-| `postmortem.html` | `build.py` | the report to publish as an artifact, drawn by the fixed `viewer.html` |
+| `postmortem.html` | `build.py` | the report to publish as an artifact and commit (built `--standalone`), drawn by the fixed `viewer.html` |
 
 The viewer draws the clock (duration, time to detect, time to mitigate), an animated SVG **timeline replay** (a playhead sweeps the incident while the phases grow and each event pops in), the **whys tree** in Mermaid, revealed one level at a time, root causes beside the actions that fix them, lessons, the action table, and copy buttons for the messages and the whole Markdown. Never write the HTML or the Markdown by hand, and never edit the viewer for one incident.
 
@@ -102,4 +102,4 @@ It prints every problem (a missing trigger, events out of order, a branch with n
 
 ### 7. Deliver
 
-Publish `postmortem.html` with the Artifact tool, with a one-sentence description of the incident. Commit `postmortem.md` where the team keeps postmortems (a `postmortems/` folder in the affected repo, named `YYYY-MM-DD-<slug>.md`), or hand it to the user when there is none. In chat, give the link, the root causes in one line each, and the open actions with their owners.
+Publish `postmortem.html` with the Artifact tool, with a one-sentence description of the incident. Commit all three files where the team keeps postmortems (a `postmortems/` folder in the affected repo): `YYYY-MM-DD-<slug>.json`, `.md`, and `.html` rebuilt with `--standalone` so it opens from a clone. Link them from the repo's docs index. Hand them to the user when there is no such folder. Rebuild and recommit the HTML whenever the JSON changes. In chat, give the link, the root causes in one line each, and the open actions with their owners.
