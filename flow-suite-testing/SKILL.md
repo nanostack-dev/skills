@@ -101,6 +101,10 @@ alone does not establish concurrency.
   depend on all relevant writes; isolate the scope or assert a verified delta.
   Before adding a write to an existing flow, list that flow's counts in the
   write's scope and update each one in the same edit.
+- Assert each new list field's empty state on the wire: an isolated tenant with
+  no data returns an empty array. Generated clients decode null and an empty array
+  alike, so only the raw response tells them apart; confirm the engine's emptiness
+  operator does too (an `empty` check may also pass on null).
 - Poll asynchronous projections with a bounded deadline and a precise condition
   tied to this run's resource. Search indexes and usage views may lag a committed
   write. Once the projection is ready, dependent assertions can share that result.
