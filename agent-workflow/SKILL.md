@@ -31,6 +31,24 @@ isolated E2E.
 When reading this skill by raw URL, resolve supporting links from the same
 repository and ref.
 
+## Design new features
+
+Before implementing a new feature, use [design-change](../design-change/SKILL.md)
+to establish the baseline, compare alternatives and define acceptance. Research
+relevant engineer-authored technology blogs, published designs/RFCs and official
+docs, especially for a big feature. Cite source URLs, their relevant lessons and
+limits, and how they affect the choice. Keep repository facts grounded in code.
+
+For a significant architecture decision, save an ADR in the owning repository's
+numbering/status convention. For a big feature, author a feature-specific
+`design.json` and use the builder to produce `design.md`, `design.html` and its
+`adr-<id>.md` decision outputs. If Graphviz is unavailable, pass `--markdown-only`
+and explicitly report that HTML was not built.
+
+Link the outputs and prior-art sources before design review. Regenerate the
+report when findings change the design. Explain inapplicable views rather than
+inventing content to fill them.
+
 ## Implement with local feedback
 
 1. Define the changed behavior and its acceptance criteria, including persistence,

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--TITLE--> · Design change</title>
+<style>
+:root{color-scheme:light dark;--canvas:#f5f6f8;--surface:#fff;--text:#192334;--muted:#586477;--line:#c7ced8;--accent:#2655bc;--added:#196442;--add-fill:#e9f5ee;--changed:#805100;--change-fill:#fff4db;--removed:#9e3432;--remove-fill:#fbefee;--quiet:#edf0f5;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media(prefers-color-scheme:dark){:root{--canvas:#12171f;--surface:#1a222d;--text:#e8edf5;--muted:#b0bac9;--line:#4b596d;--accent:#9ebcff;--added:#91dbb2;--add-fill:#1b3529;--changed:#f0ce8b;--change-fill:#382f1d;--removed:#ffaca7;--remove-fill:#3c2528;--quiet:#242e3b}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--canvas);color:var(--text);font:15px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}h1,h2,h3,p{margin:0}h1{font-size:clamp(28px,4vw,46px);line-height:1.15;letter-spacing:-.035em;max-width:26ch}h2{font-size:25px;line-height:1.25;letter-spacing:-.025em}h3{font-size:18px;line-height:1.4}a{color:var(--accent)}.wrap{max-width:1180px;margin:auto;padding-inline:24px;min-width:0}.hero{background:var(--surface);border-bottom:1px solid var(--line)}.hero .wrap{display:grid;gap:18px;padding-block:34px}.eyebrow,.baseline,.trace,.status{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}.eyebrow{text-transform:uppercase;letter-spacing:.09em}.hero .summary{font-size:18px;max-width:72ch}.status{text-transform:uppercase}.hero .status{color:var(--accent)}nav{display:flex;gap:10px 20px;flex-wrap:wrap}nav a{font-size:13px;text-decoration:none}main{display:grid;gap:52px;padding-block:42px 70px}section{display:grid;gap:18px;scroll-margin-top:20px;min-width:0}section>p{max-width:78ch}article{display:grid;gap:12px;min-width:0}article+article{padding-top:24px;border-top:1px solid var(--line)}.columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}.columns>div{min-width:0}ul{margin:8px 0;padding-left:22px}li{overflow-wrap:anywhere}button{font:inherit;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 14px;cursor:pointer}button:hover{background:var(--quiet)}button[aria-pressed=true]{background:var(--text);color:var(--surface);border-color:var(--text)}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.compare,.step-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.view{display:grid;gap:16px;background:var(--surface);padding:22px;border:1px solid var(--line);border-radius:10px}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;font-family:var(--mono)}.added{color:var(--added)}.changed{color:var(--changed)}.removed{color:var(--removed)}.snapshot-label{font-size:13px;color:var(--muted)}.graph-scroll,.sequence-scroll,.table-scroll{overflow:auto;max-width:100%;min-width:0}.graph-scroll{padding-bottom:8px}.architecture{display:block;width:100%;min-width:720px;height:auto}.architecture text{fill:var(--text);font-family:system-ui,sans-serif;font-size:13px}.architecture .node-name{font-weight:650;font-size:14px}.architecture .node-detail{font-size:13px}.architecture .node>path,.architecture .node>polygon{fill:var(--surface);stroke:var(--line);stroke-width:1.4}.architecture .edge path{stroke:var(--muted);fill:none}.architecture .edge polygon{fill:var(--muted);stroke:var(--muted)}.architecture .edge text{font-size:12px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}.architecture .state-added>path{fill:var(--add-fill);stroke:var(--added)}.architecture .state-changed>path{fill:var(--change-fill);stroke:var(--changed)}.architecture .state-removed>path{fill:var(--remove-fill);stroke:var(--removed);stroke-dasharray:5 4}.architecture .edge.state-added path{fill:none;stroke:var(--added)}.architecture .edge.state-removed path{fill:none;stroke:var(--removed)}.architecture .edge.state-added polygon{fill:var(--added);stroke:var(--added)}.architecture .edge.state-removed polygon{fill:var(--removed);stroke:var(--removed)}.snapshot-edge-label{display:none}.view:not([data-mode=changes]) .snapshot-edge-label{display:block}.view:not([data-mode=changes]) .change-edge-label{display:none}.node-label{display:none}.view[data-mode=changes] .label-changes,.view[data-mode=before] .label-before,.view[data-mode=after] .label-after{display:block}.view[data-mode=before] .state-added,.view[data-mode=after] .state-removed{visibility:hidden}.view:not([data-mode=changes]) .node>path{fill:var(--surface);stroke:var(--line);stroke-dasharray:none}.view:not([data-mode=changes]) .edge path{stroke:var(--muted);stroke-dasharray:none}.view:not([data-mode=changes]) .edge polygon{fill:var(--muted);stroke:var(--muted)}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.5}th,td{text-align:left;vertical-align:top;padding:12px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;min-width:100px}th{font-weight:650}th:first-child,td:first-child{padding-left:0}pre{margin:0;background:var(--quiet);border-radius:6px;padding:20px;overflow:auto;max-width:100%;font:13px/1.65 var(--mono);tab-size:2}code{font-family:var(--mono)}small{font-weight:400;color:var(--muted)}.scenario{gap:16px}.sequence{color:var(--text);display:block;max-width:none;min-width:680px}.sequence text{fill:var(--text);font-family:system-ui,sans-serif;font-size:12px}.sequence .participant{font-size:13px;font-weight:650}.sequence .lifeline{stroke:var(--line);stroke-dasharray:4 5}.message path,.message line{fill:none;stroke:currentColor;stroke-width:1.5}.message .async{stroke-dasharray:3 3}.message .reply{stroke-dasharray:7 4}.message.active{color:var(--accent)}.message.active text{fill:var(--accent);font-weight:650}.steps{display:grid;gap:12px;padding-left:26px;margin:0}.steps li{padding:12px 14px;border-left:3px solid var(--line);background:var(--surface)}.steps li.active{border-left-color:var(--accent);background:var(--quiet)}.mode{font:11px var(--mono);margin-left:10px;text-transform:uppercase;color:var(--muted)}.step-detail{color:var(--muted);font-size:13px}.step-status{font-size:13px;color:var(--muted)}.acceptance{padding-bottom:18px}.acceptance p{max-width:78ch}
+@media(max-width:680px){.wrap{padding-inline:16px}.columns{grid-template-columns:1fr}.hero .wrap{padding-block:26px}.view{padding:14px}.compare button,.step-controls button{min-height:44px}main{gap:40px}.sequence{min-width:680px}h2{font-size:22px}th,td{min-width:115px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+@media print{body{background:white;color:black;font-size:11px}.wrap{max-width:none;padding:0}.hero{border:0}.compare,.step-controls,nav{display:none}.graph-scroll,.sequence-scroll,.table-scroll{overflow:visible}.architecture,.sequence{min-width:0}.view{break-inside:avoid}section{break-before:auto}button{display:none}.node-label{display:none!important}.label-changes{display:block!important}.architecture .state-added,.architecture .state-removed{visibility:visible!important}.steps li{break-inside:avoid}pre{white-space:pre-wrap}table{font-size:10px}th,td{min-width:0}main{gap:26px}}
+</style>
+</head>
+<body>
+<div class="hero"><div class="wrap">
+<p class="eyebrow">Design change <span class="status">· <!--STATUS--></span></p>
+<h1><!--TITLE--></h1>
+<p class="summary"><!--SUMMARY--></p>
+<p class="baseline">Baseline: <!--BASELINE--></p>
+<nav aria-label="Report sections"><a href="#overview">Overview</a><a href="#decisions">Decisions</a><a href="#pseudocode">Pseudocode</a><a href="#acceptance">Acceptance</a><a href="#rollout">Rollout</a><a href="#questions">Questions</a><a href="#evidence">Evidence</a></nav>
+</div></div>
+<main class="wrap"><!--CONTENT--></main>
+<script>
+document.querySelectorAll('.view').forEach(view=>{
+  view.querySelectorAll('button[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+    view.dataset.mode=button.dataset.mode;
+    view.querySelectorAll('button[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+    view.querySelector('.snapshot-label').textContent={before:'Before: existing system at the named baseline.',changes:'Changes: existing and proposed structure together.',after:'After: proposed end state; implementation status is separate.'}[button.dataset.mode];
+  }));
+});
+document.querySelectorAll('.scenario').forEach(scenario=>{
+  let index=0;const steps=[...scenario.querySelectorAll('[data-step]')];
+  const previous=scenario.querySelector('[data-action=previous]'),next=scenario.querySelector('[data-action=next]');
+  const update=()=>{
+    steps.forEach((step,i)=>{step.classList.toggle('active',i===index);if(i===index)step.setAttribute('aria-current','step');else step.removeAttribute('aria-current')});
+    scenario.querySelectorAll('[data-message]').forEach((message,i)=>message.classList.toggle('active',i===index));
+    scenario.querySelector('.step-status').textContent=`Step ${index+1} of ${steps.length}: ${steps[index].querySelector('p').textContent}`;
+    previous.disabled=index===0;next.disabled=index===steps.length-1;
+  };
+  previous.addEventListener('click',()=>{if(index>0){index--;update()}});
+  next.addEventListener('click',()=>{if(index<steps.length-1){index++;update()}});update();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,889 @@
+{
+  "schema_version": 1,
+  "title": "Reliable shipment requests",
+  "status": "proposed",
+  "baseline": {
+    "label": "Fictional example, not a repository audit",
+    "revision": "Illustrative baseline v1"
+  },
+  "summary": "A customer can request a shipment even when the parcel provider is slow. We record the order and dispatch intent together, then a dispatcher creates or reconciles the shipment. A timeout leaves the outcome unknown until it is confirmed. This example illustrates the report format; no implementation or acceptance test is claimed.",
+  "problem": "Today the fictional API calls the provider before saving the shipment reference. A provider success followed by a connection loss can leave the customer unsure whether retrying will create another shipment.",
+  "goals": [
+    "One acknowledged request remains visible through restart and provider timeout.",
+    "The customer sees Processing until a provider shipment is confirmed.",
+    "A repeated request for the same order reuses the same dispatch identity."
+  ],
+  "non_goals": [
+    "Change parcel pricing or select another provider.",
+    "Claim universal or end-to-end exactly-once delivery.",
+    "Automatically undo shipments already created."
+  ],
+  "evidence": [
+    {
+      "id": "E1",
+      "status": "illustrative",
+      "source": "Fictional baseline defined in this example",
+      "claim": "The API currently calls the provider synchronously and then stores provider_ref on Order."
+    },
+    {
+      "id": "E2",
+      "status": "assumption",
+      "source": "Fictional Parcel Provider contract; verify real provider documentation before implementation",
+      "claim": "For illustration only: create is idempotent for the same key and payload for 72 hours; changed payload is rejected; query-by-key can confirm a shipment. This is not a verified provider guarantee."
+    },
+    {
+      "id": "E3",
+      "status": "observed",
+      "source": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html",
+      "claim": "A local transaction can atomically store business state and durable intent; downstream delivery may repeat."
+    },
+    {
+      "id": "E4",
+      "status": "observed",
+      "source": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+      "claim": "A timeout does not establish that a remote side effect failed."
+    },
+    {
+      "id": "E5",
+      "status": "assumption",
+      "source": "Illustrative policy values, pending owner approval and measurement",
+      "claim": "At most three reserved create attempts and six reconciliation queries per command. Attempt eligibility closes at 48 hours; an already-authorized call may settle later. Original key retained for all attempts. Numeric values are illustrative, not operational recommendations."
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV1",
+      "text": "An acknowledged shipment request has durable intent and a visible order status.",
+      "evidence": [
+        "E3"
+      ]
+    },
+    {
+      "id": "INV2",
+      "text": "A command keeps one key and one payload; repeated execution never chooses a fresh identity.",
+      "evidence": [
+        "E2"
+      ]
+    },
+    {
+      "id": "INV3",
+      "text": "Only a confirmed provider shipment makes an order Shipped; timeout means Unknown.",
+      "evidence": [
+        "E4"
+      ]
+    },
+    {
+      "id": "INV4",
+      "text": "Create attempts stop at the configured count or time bound, including after worker restart.",
+      "evidence": [
+        "E5"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "title": "Separate shipment acceptance from provider delivery",
+      "status": "proposed",
+      "context": "The provider creates the external effect, while our system owns the order and dispatch intent. A lost response cannot be repaired safely by blindly starting another request.",
+      "options": [
+        {
+          "name": "Keep synchronous provider calls",
+          "tradeoffs": [
+            "Least implementation work.",
+            "Customer request depends on provider availability; a lost response leaves no durable recovery instruction."
+          ]
+        },
+        {
+          "name": "Durable command with a dispatcher",
+          "tradeoffs": [
+            "Local acceptance survives provider latency and worker restarts.",
+            "Adds processing states, dispatch ownership, and reconciliation work."
+          ]
+        },
+        {
+          "name": "Publish directly to a broker after saving",
+          "tradeoffs": [
+            "Allows independent delivery workers.",
+            "Introduces a dual-write gap unless publication is coupled to the local commit."
+          ]
+        }
+      ],
+      "choice": "Durable command with a dispatcher",
+      "consequences": [
+        "Order and ShippingCommand are written in one local transaction.",
+        "Provider delivery happens outside that transaction and may repeat with the same identity.",
+        "The UI must distinguish Processing, Shipped, and Needs review.",
+        "The provider assumption E2 is decision-critical and must be verified before accepting this ADR."
+      ],
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "context",
+      "title": "Big picture · ownership stays clear",
+      "kind": "context",
+      "note": "System context. The external provider remains authoritative for shipment creation; our system adds durable dispatch intent and reconciliation to its ownership of order state. The same actors remain landmarks.",
+      "evidence": [
+        "E1",
+        "E2"
+      ],
+      "before": {
+        "nodes": [
+          {
+            "id": "buyer",
+            "name": "Customer",
+            "kind": "actor",
+            "owner": "Customer",
+            "fields": {
+              "responsibility": "requests and tracks shipment"
+            }
+          },
+          {
+            "id": "system",
+            "name": "Shipping system",
+            "kind": "system",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "owns order state"
+            }
+          },
+          {
+            "id": "parcel",
+            "name": "Parcel Provider",
+            "kind": "external",
+            "owner": "Third party",
+            "fields": {
+              "responsibility": "owns actual shipment creation"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "request",
+            "from": "buyer",
+            "to": "system",
+            "label": "Request shipment; see status",
+            "cardinality": ""
+          },
+          {
+            "id": "shipment",
+            "from": "system",
+            "to": "parcel",
+            "label": "Create shipment; provider owns effect",
+            "cardinality": ""
+          }
+        ]
+      },
+      "after": {
+        "nodes": [
+          {
+            "id": "buyer",
+            "name": "Customer",
+            "kind": "actor",
+            "owner": "Customer",
+            "fields": {
+              "responsibility": "requests and tracks shipment"
+            }
+          },
+          {
+            "id": "system",
+            "name": "Shipping system",
+            "kind": "system",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "owns order and durable dispatch intent"
+            }
+          },
+          {
+            "id": "parcel",
+            "name": "Parcel Provider",
+            "kind": "external",
+            "owner": "Third party",
+            "fields": {
+              "responsibility": "owns actual shipment creation"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "request",
+            "from": "buyer",
+            "to": "system",
+            "label": "Request shipment; see status",
+            "cardinality": ""
+          },
+          {
+            "id": "shipment",
+            "from": "system",
+            "to": "parcel",
+            "label": "Create / query shipment; provider owns effect",
+            "cardinality": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "entities",
+      "title": "Entity changes · retain the old model",
+      "kind": "entities",
+      "note": "Logical entities, not a complete physical schema. Explicit counts describe relationships. Order keeps its identity; provider_ref moves into ShippingCommand. A Needs review command still blocks creation of another identity for that order.",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "before": {
+        "nodes": [
+          {
+            "id": "customer",
+            "name": "Customer",
+            "kind": "entity",
+            "owner": "Shipping system",
+            "fields": {
+              "id": "UUID",
+              "email": "text"
+            }
+          },
+          {
+            "id": "order",
+            "name": "Order",
+            "kind": "entity",
+            "owner": "Shipping system",
+            "fields": {
+              "id": "UUID",
+              "state": "ready | shipped",
+              "provider_ref": "nullable provider shipment ID"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "owns",
+            "from": "customer",
+            "to": "order",
+            "label": "places",
+            "cardinality": "1 Customer : 0..n Orders"
+          }
+        ]
+      },
+      "after": {
+        "nodes": [
+          {
+            "id": "customer",
+            "name": "Customer",
+            "kind": "entity",
+            "owner": "Shipping system",
+            "fields": {
+              "id": "UUID",
+              "email": "text"
+            }
+          },
+          {
+            "id": "order",
+            "name": "Order",
+            "kind": "entity",
+            "owner": "Shipping system",
+            "fields": {
+              "id": "UUID",
+              "state": "ready | processing | shipped | needs_review"
+            }
+          },
+          {
+            "id": "command",
+            "name": "ShippingCommand",
+            "kind": "entity",
+            "owner": "Shipping system",
+            "fields": {
+              "id": "UUID",
+              "order_id": "UUID; unique, including needs_review",
+              "key": "immutable provider idempotency key",
+              "payload_hash": "binds key to shipment details",
+              "state": "pending | unknown | confirmed | needs_review",
+              "provider_ref": "nullable provider shipment ID",
+              "attempts": "bounded; preserved across crashes",
+              "queries": "bounded; preserved across crashes"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "owns",
+            "from": "customer",
+            "to": "order",
+            "label": "places",
+            "cardinality": "1 Customer : 0..n Orders"
+          },
+          {
+            "id": "dispatches",
+            "from": "order",
+            "to": "command",
+            "label": "has dispatch intent",
+            "cardinality": "1 Order : 0..1 Command"
+          }
+        ]
+      }
+    },
+    {
+      "id": "services",
+      "title": "Service structure · the external call moves",
+      "kind": "services",
+      "note": "Runtime responsibilities. Database arrows describe reads/writes, not remote transaction membership. The removed API → provider call remains visible in Changes; its replacement goes through the dispatcher.",
+      "evidence": [
+        "E1",
+        "E3"
+      ],
+      "before": {
+        "nodes": [
+          {
+            "id": "api",
+            "name": "Shipping API",
+            "kind": "service",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "authorize and accept shipment requests"
+            }
+          },
+          {
+            "id": "db",
+            "name": "Order database",
+            "kind": "store",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "order state"
+            }
+          },
+          {
+            "id": "parcel",
+            "name": "Parcel Provider",
+            "kind": "external",
+            "owner": "Third party",
+            "fields": {
+              "responsibility": "owns actual shipment creation"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "save",
+            "from": "api",
+            "to": "db",
+            "label": "Save order after provider response",
+            "cardinality": ""
+          },
+          {
+            "id": "direct",
+            "from": "api",
+            "to": "parcel",
+            "label": "HTTPS create; synchronous",
+            "cardinality": ""
+          }
+        ]
+      },
+      "after": {
+        "nodes": [
+          {
+            "id": "api",
+            "name": "Shipping API",
+            "kind": "service",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "authorize and accept shipment requests"
+            }
+          },
+          {
+            "id": "db",
+            "name": "Order database",
+            "kind": "store",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "order state + durable dispatch intent"
+            }
+          },
+          {
+            "id": "parcel",
+            "name": "Parcel Provider",
+            "kind": "external",
+            "owner": "Third party",
+            "fields": {
+              "responsibility": "owns actual shipment creation"
+            }
+          },
+          {
+            "id": "worker",
+            "name": "Dispatcher",
+            "kind": "service",
+            "owner": "Our team",
+            "fields": {
+              "responsibility": "bounded delivery and reconciliation"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "save",
+            "from": "api",
+            "to": "db",
+            "label": "Atomic order + dispatch intent",
+            "cardinality": ""
+          },
+          {
+            "id": "claim",
+            "from": "worker",
+            "to": "db",
+            "label": "Claim / confirm; local transactions",
+            "cardinality": ""
+          },
+          {
+            "id": "create",
+            "from": "worker",
+            "to": "parcel",
+            "label": "HTTPS create / query; bounded attempts",
+            "cardinality": ""
+          }
+        ]
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "F1",
+      "title": "Service interaction · accept a durable request",
+      "kind": "internal",
+      "contract": "An authorization check precedes a local transaction. Order and intent commit before a success response is acknowledged. Repeated requests reuse the existing command, including Unknown and Needs review; they never choose a fresh key. The dispatcher never participates in the customer transaction.",
+      "evidence": [
+        "E3"
+      ],
+      "participants": [
+        {
+          "id": "buyer",
+          "name": "Customer",
+          "role": "initiates request"
+        },
+        {
+          "id": "api",
+          "name": "Shipping API",
+          "role": "authorizes request; owns local transaction"
+        },
+        {
+          "id": "db",
+          "name": "Order database",
+          "role": "durable local state"
+        },
+        {
+          "id": "worker",
+          "name": "Dispatcher",
+          "role": "independent delivery worker"
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "S1",
+          "title": "Request accepted before provider delivery",
+          "steps": [
+            {
+              "from": "buyer",
+              "to": "api",
+              "label": "Request shipment for order O1",
+              "mode": "sync",
+              "detail": "The API checks that the customer can dispatch this order."
+            },
+            {
+              "from": "api",
+              "to": "db",
+              "label": "Commit order + dispatch intent",
+              "mode": "sync",
+              "detail": "One local transaction stores Processing, command C1, key K1, and the immutable shipment payload. A unique order_id constraint resolves concurrent requests and keeps Needs review identity-blocking."
+            },
+            {
+              "from": "db",
+              "to": "api",
+              "label": "Commit acknowledged",
+              "mode": "reply",
+              "detail": "The intent and order are durable before the API acknowledges the request."
+            },
+            {
+              "from": "api",
+              "to": "buyer",
+              "label": "Return Processing and tracking link",
+              "mode": "reply",
+              "detail": "The customer can observe Processing without waiting for the provider."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Claim pending command C1",
+              "mode": "sync",
+              "detail": "A short lease and version token fence local updates. A persisted attempt reservation happens before each external create call."
+            }
+          ],
+          "acceptance": [
+            "AC1",
+            "AC4"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "Third-party flow · confirmed, unknown, repeated",
+      "kind": "third-party",
+      "contract": "Illustrative provider contract E2 must be verified. The dispatcher sends shipment address and order reference over authenticated HTTPS using scoped provider credentials. Create uses immutable key K1 and payload; query-by-key reconciles uncertain outcomes. Only the dispatcher owns retries: at most three reserved creates and six reserved queries; eligibility closes at 48 hours (illustrative E5). Already-authorized calls may settle later. Backoff uses jitter; retries never choose a fresh key. Needs review stops further automatic attempts but preserves the identity. Provider effects cannot be rolled back by a database transaction. No webhook is assumed.",
+      "evidence": [
+        "E2",
+        "E4",
+        "E5"
+      ],
+      "participants": [
+        {
+          "id": "worker",
+          "name": "Dispatcher",
+          "role": "retry owner; immutable command identity"
+        },
+        {
+          "id": "parcel",
+          "name": "Parcel Provider",
+          "role": "external authority; assumed idempotency/query contract"
+        },
+        {
+          "id": "db",
+          "name": "Order database",
+          "role": "order + command state; no remote atomicity"
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "S2",
+          "title": "Provider confirms a shipment",
+          "steps": [
+            {
+              "from": "worker",
+              "to": "parcel",
+              "label": "Create shipment with key K1",
+              "mode": "sync",
+              "detail": "The dispatcher uses the stored immutable payload and key after reserving an attempt in a local transaction."
+            },
+            {
+              "from": "parcel",
+              "to": "worker",
+              "label": "Return confirmed shipment P1",
+              "mode": "reply",
+              "detail": "The provider is authoritative for P1. The reply must match the command identity."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Confirm C1 and mark O1 Shipped",
+              "mode": "sync",
+              "detail": "One local transaction stores P1 and Shipped using the lease version. A stale worker cannot overwrite newer confirmation."
+            }
+          ],
+          "acceptance": [
+            "AC2"
+          ]
+        },
+        {
+          "id": "S3",
+          "title": "Response is lost after possible creation",
+          "steps": [
+            {
+              "from": "worker",
+              "to": "parcel",
+              "label": "Create shipment with key K1",
+              "mode": "sync",
+              "detail": "P1 may be created even if the response is lost."
+            },
+            {
+              "from": "worker",
+              "to": "worker",
+              "label": "Timeout: outcome remains unknown",
+              "mode": "local",
+              "detail": "Timeout is not a provider refusal and does not authorize a new key."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Persist Unknown; order stays Processing",
+              "mode": "sync",
+              "detail": "The customer is not told Shipped or Failed. The persisted attempt count survives restart."
+            },
+            {
+              "from": "worker",
+              "to": "parcel",
+              "label": "Query existing shipment by key K1",
+              "mode": "sync",
+              "detail": "Reconciliation confirms the previous effect before any further create attempt. Query unavailability leaves the command Unknown."
+            },
+            {
+              "from": "parcel",
+              "to": "worker",
+              "label": "Confirm prior shipment P1",
+              "mode": "reply",
+              "detail": "This scenario assumes the provider can return the record under E2."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Confirm P1; mark order Shipped",
+              "mode": "sync",
+              "detail": "One fenced local transaction stores the confirmed reference and customer-visible Shipped state."
+            }
+          ],
+          "acceptance": [
+            "AC3"
+          ]
+        },
+        {
+          "id": "S4",
+          "title": "A stale worker repeats the external call",
+          "steps": [
+            {
+              "from": "worker",
+              "to": "parcel",
+              "label": "Repeat create with the same key K1",
+              "mode": "sync",
+              "detail": "Worker interruption may repeat a call. Same identity and payload are necessary even with a local lease."
+            },
+            {
+              "from": "parcel",
+              "to": "worker",
+              "label": "Return the same shipment P1",
+              "mode": "reply",
+              "detail": "Under E2, the provider associates the replay with P1 rather than creating P2. This claim depends on the unverified provider contract."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Confirm only if lease version is current",
+              "mode": "sync",
+              "detail": "A stale local update is discarded. Existing confirmation is monotonic and remains visible."
+            }
+          ],
+          "acceptance": [
+            "AC4"
+          ]
+        },
+        {
+          "id": "S5",
+          "title": "Automatic recovery reaches its limit",
+          "steps": [
+            {
+              "from": "worker",
+              "to": "worker",
+              "label": "Eligibility closes; outcome unresolved",
+              "mode": "local",
+              "detail": "The time window closes, or create/query budgets are exhausted and all already-authorized attempts have settled or timed out. No new attempt is authorized."
+            },
+            {
+              "from": "worker",
+              "to": "db",
+              "label": "Mark command and order Needs review",
+              "mode": "sync",
+              "detail": "One local transaction updates both records with the current lease version. The original key and payload are retained."
+            },
+            {
+              "from": "worker",
+              "to": "worker",
+              "label": "Stop automatic attempts; preserve K1",
+              "mode": "local",
+              "detail": "A repeated customer request returns the existing Needs review identity. Operators can investigate K1 without authorizing another shipment. A verified late confirmation may still resolve the original effect."
+            }
+          ],
+          "acceptance": [
+            "AC5"
+          ]
+        }
+      ]
+    }
+  ],
+  "pseudocode": [
+    {
+      "id": "P1",
+      "title": "Accept locally; deliver and reconcile separately",
+      "code": "accept_shipment(customer, order_id):\n  authorize(customer, order_id)\n  LOCAL TRANSACTION:\n    lock order\n    if order is shipped: return existing shipment status\n    if command exists (including unknown or needs_review):\n      return its existing status and tracking identity\n    insert command(key = stable_random_id(), immutable_payload, attempts = 0)\n    set order.status = processing\n  COMMIT\n  return Processing                         // INV1, AC1\n\ndispatch(command_id):\n  LOCAL TRANSACTION:\n    claim eligible command with lease_version\n    if confirmed or needs_review: return\n    if elapsed >= 48 hours or attempts >= 3:\n      command = needs_review; order = needs_review\n      COMMIT; return                         // illustrative bounds; INV4\n    reserve attempt; increment attempts\n  COMMIT                                     // no provider I/O in transaction\n  call provider.create(stored_key, immutable_payload)  // INV2, AC4\n  // Already-authorized call may settle after eligibility closes.\n  on confirmed response:\n    LOCAL TRANSACTION:\n      if lease_version is current:\n        store provider_ref; command = confirmed; order = shipped\n    COMMIT                                   // INV3, AC2\n  on timeout or ambiguous response:\n    persist unknown only if lease_version is current\n    schedule reconciliation with bounded backoff + jitter  // AC3\n  on verified permanent refusal:\n    mark_review_with_fencing(command, order, lease_version)\n\nreconcile_unknown(command):\n  LOCAL TRANSACTION:\n    claim current lease_version\n    if confirmed or needs_review: return\n    if elapsed >= 48 hours or queries >= 6:\n      command = needs_review; order = needs_review\n      COMMIT; return\n    reserve query; increment queries\n  COMMIT\n  query provider by stored_key                // never a new identity\n  if confirmed: confirm with current lease_version\n  else if provider explicitly confirms no effect and budget remains:\n    schedule dispatch with SAME key and payload\n  else if budget expired:\n    mark_review_with_fencing(command, order, lease_version) // INV4, AC5\n  else:\n    keep unknown; schedule bounded reconciliation\n\nmark_review_with_fencing(command, order, lease_version):\n  LOCAL TRANSACTION:\n    if lease_version is current and command is not confirmed:\n      command = needs_review; order = needs_review\n      preserve key, payload, and tracking identity\n  COMMIT\n",
+      "invariants": [
+        "INV1",
+        "INV2",
+        "INV3",
+        "INV4"
+      ],
+      "acceptance": [
+        "AC1",
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ]
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "AC1",
+      "title": "Request survives a dispatcher restart",
+      "given": "an authorized customer has an order ready to ship",
+      "when": "the shipment request is acknowledged and the dispatcher restarts before contacting the provider",
+      "then": [
+        "The customer still sees Processing and can use the same tracking link.",
+        "Delivery work resumes for the acknowledged request after restart."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV1"
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "Confirmed shipment becomes visible",
+      "given": "a shipment request is Processing",
+      "when": "the provider confirms shipment P1",
+      "then": [
+        "The customer sees Shipped with the tracking reference for P1.",
+        "Refreshing the order preserves the confirmed status."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV3"
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Lost response does not report failure",
+      "given": "the provider may have created a shipment but its response was lost",
+      "when": "the request times out and reconciliation later confirms P1",
+      "then": [
+        "The customer sees Processing while the outcome is unresolved.",
+        "The customer then sees Shipped with P1 rather than being asked to start a new shipment."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV2",
+        "INV3"
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "Repeated requests retain one identity",
+      "given": "the same order already has a Processing request and the illustrative provider contract E2 holds",
+      "when": "the customer repeats the request and two worker executions overlap",
+      "then": [
+        "The customer receives the same processing/tracking identity.",
+        "The external provider receives the same key and payload for any repeated create call.",
+        "The provider exposes the same shipment P1 for the repeated calls under E2."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV1",
+        "INV2"
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "Unresolved delivery stops at its budget",
+      "given": "a request remains unresolved under the illustrative policy E5",
+      "when": "attempt eligibility closes, or create/query budgets are exhausted after already-authorized attempts settle or time out",
+      "then": [
+        "The customer sees Needs review instead of a false Shipped status.",
+        "No further automatic attempt is authorized for the command; any previously authorized call may settle later.",
+        "The provider receives at most three create attempts and six queries for the original identity.",
+        "Repeating the customer request returns the same Needs review tracking identity.",
+        "An operator can investigate the original identity without starting another shipment request."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV2",
+        "INV4"
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "Existing shipped orders remain readable",
+      "given": "an order was shipped before this change",
+      "when": "a customer opens it after the compatibility migration",
+      "then": [
+        "The original shipment reference and Shipped status remain visible.",
+        "Opening the order triggers no new shipment create call."
+      ],
+      "status": "specified",
+      "invariants": [
+        "INV3"
+      ]
+    }
+  ],
+  "rollout": [
+    {
+      "stage": "1 · Expand",
+      "entry": "Verify provider contract E2; approve policy values E5.",
+      "change": "Add command storage and new read states; keep legacy provider_ref readable.",
+      "exit": "Old and new readers render existing shipped orders (AC6).",
+      "recovery": "Disable new writer; old records are still readable."
+    },
+    {
+      "stage": "2 · Migrate",
+      "entry": "Compatible readers are deployed.",
+      "change": "Backfill confirmed legacy references into completed commands without making provider calls.",
+      "exit": "Reference parity is checked; unconfirmed legacy orders are reconciled or quarantined.",
+      "recovery": "Keep legacy references; repair/re-run backfill with stable command IDs."
+    },
+    {
+      "stage": "3 · Activate",
+      "entry": "No legacy writer can bypass the active-command constraint.",
+      "change": "Enable durable acceptance and dispatcher for eligible orders.",
+      "exit": "AC1–AC5 pass; pending age and Needs review volume meet owner-approved bounds.",
+      "recovery": "Stop new dispatches; retain Processing intents. Reconcile in-flight provider effects; do not re-enable blind legacy retries."
+    },
+    {
+      "stage": "4 · Contract",
+      "entry": "Observation window approved; parity holds; no old reader remains.",
+      "change": "Retire direct provider calls and legacy provider_ref only after explicit approval.",
+      "exit": "Legacy access is absent and completed commands serve all shipment references.",
+      "recovery": "After field removal, use forward repair or restore from preserved migration data; binary rollback alone cannot recreate lost data."
+    }
+  ],
+  "risks": [
+    {
+      "risk": "Provider idempotency/query semantics differ from E2.",
+      "mitigation": "Verify the real API/version before accepting D1; choose another reconciliation strategy if necessary.",
+      "acceptance": [
+        "AC3",
+        "AC4"
+      ]
+    },
+    {
+      "risk": "Migration activates both old and new create paths.",
+      "mitigation": "Gate activation on legacy writer retirement and quarantine unresolved legacy orders.",
+      "acceptance": [
+        "AC4",
+        "AC6"
+      ]
+    },
+    {
+      "risk": "Backlog exceeds the illustrative retry window.",
+      "mitigation": "Observe pending age; stop at the configured bound and expose Needs review. Agree staffing and alert threshold before activation.",
+      "acceptance": [
+        "AC5"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "question": "Does the actual provider support key-bound payloads, retention, and query-by-key?",
+      "affects": "D1 and AC3/AC4; E2 is a blocking assumption for implementation."
+    },
+    {
+      "question": "What retry budget and pending-age alert fit measured latency and operations capacity?",
+      "affects": "E5, INV4, AC5, and rollout activation."
+    },
+    {
+      "question": "Who owns Needs review and what response time is required?",
+      "affects": "Operational acceptance and readiness for stage 3."
+    }
+  ],
+  "omitted_views": []
+}
