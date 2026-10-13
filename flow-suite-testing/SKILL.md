@@ -21,6 +21,10 @@ schemas and supported management interfaces. Identify:
 - The authorized test runtime, organization or tenant, environment and credentials.
 - Setup dependencies, execution reports, cleanup ownership and external fixtures.
 - Supported graph, assertion, variable, polling and event-collection capabilities.
+- The application revision the target serves. Compare its reported version with
+  the merged change before authoring coverage; a target behind its main branch
+  means a stalled deploy, which is a failure to report and leaves the change
+  untestable until it ships.
 - The engine version each gate executes on. A runner embedded in a CLI can lag the
   server's hosted runner; test new engine semantics on the runner that ships them.
 
