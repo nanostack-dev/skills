@@ -42,3 +42,8 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
   evidence-backed timeline, a branching Five Whys tree in Mermaid, an owned
   action per root cause, published as an animated HTML report plus a Markdown
   document.
+
+- [`design-change`](design-change/SKILL.md) — researched ADRs and software designs:
+  evidence-backed decisions, stable Before/Changes/After entities, service and
+  provider flows, pseudocode, natural-language acceptance, and rollout/rollback.
+  Produces Markdown and an offline visual report from one JSON source.

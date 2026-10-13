@@ -5,3 +5,10 @@ For documentation changes, check affected local links, SKILL.md resource pointer
 For supporting Python scripts, use `python3 -m py_compile <changed-script>`, inspect `--help`, then run a supplied example or disposable consumer fixture through the changed behavior and inspect the generated artifact. Compilation alone does not verify a report.
 
 For procedure changes, exercise the changed branch against a concrete consumer problem, preserving the skill's invocation policy and evidence/completion criteria. Verify cloud/raw consumers can reach all disclosed resources. There is no tracked repository CI workflow that automatically proves every procedure; report exact manual validation and any unexercised behavior.
+
+For `design-change`, run `python3 -B design-change/scripts/test_build.py` and build
+`design-change/examples/shipping/design.json` with the builder in full and
+`--markdown-only` modes into disposable directories. Its fictional acceptance
+scenarios remain specified; a successful report build does not execute those
+product scenarios. Check new workflow instructions against the generated ADR
+and cited-source requirements without replacing existing routing or approval.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Change"
+  short_description: "ADRs and visual before/after software designs"
+  default_prompt: "Use $design-change to explain this architecture change with an ADR, before/after entities, service flows, pseudocode, and acceptance scenarios."
