@@ -179,8 +179,12 @@ branch does not conceal unrelated event outcomes.
 
 - Correlate each expectation with this run's resource and action, not event type
   alone. Check important payload fields and relevant authentication metadata.
-- Ensure one event cannot satisfy two distinct required occurrences. Verify the
-  matcher's consumption rules or implement a supported explicit matching check.
+- Write counts that hold under any claim order. Express N occurrences of one event
+  as one expectation with an exact count (min N, max N), and bound a catch-all
+  ("no other X") by the total the specific expectations require. A matcher may
+  count an event against every expectation it satisfies, so overlapping
+  expectations that relied on one-event-one-claim break when the engine changes
+  that rule ([2026-10-14 postmortem](https://github.com/nanostack-dev/echopoint/blob/main/docs/postmortems/2026-10-14-webhook-wait-max-semantics.md)).
 - Assert required, forbidden and duplicate events according to the actual delivery
   contract. Account for retries and event identifiers when deduplication matters.
 - Use a documented observation/settling window for absence or extra-event checks.
