@@ -59,7 +59,9 @@ authorization requirements.
 6. **Diagnose.** Separate product assertions from setup, provider, runner and
    shared-quota failures. A rejection by a limit other callers also spend (a rolling
    launch budget, a rate limit) is a platform cause: read its scope from the error,
-   count the quota's other consumers in the window, and fix the contention.
+   count the quota's other consumers in the window (scheduled monitors and probes
+   included; one whose own cadence exceeds the quota keeps it full), and fix the
+   contention.
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
