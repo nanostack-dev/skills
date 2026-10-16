@@ -1,6 +1,6 @@
 ---
 name: agent-workflow
-description: Implement a feature or behavioral fix with affected-area E2E run locally before pushing and CI as the complete final verification gate. Apply the documented cloud exception when the agent cannot access the local test environment.
+description: Implement a feature or behavioral fix with affected-area E2E run locally before pushing, a design-reviewed spec and parallel external code review, and CI as the complete final verification gate. Apply the documented cloud exception when the agent cannot access the local test environment.
 ---
 
 # Agent workflow
@@ -114,6 +114,23 @@ flowchart TD
     Diagnose --> CI
 ```
 
+## Review in parallel with the gates
+
+For a non-trivial change, run the loop in [review-loop](references/review-loop.md):
+
+1. Before fanning implementation out, write the spec with a line per defect class
+   (A migration safety, B behavior parity, C input validation, D untrusted decoding,
+   E frontend async state) and have one external reviewer review the spec.
+2. Start external review at the first push, in parallel with CI and the complete
+   suite; slice the review by area above about 40 changed files.
+3. Send reviewers the standing prompt template, which asks for every defect with
+   file:line, scenario and minimal fix. Use its verified Codex and Grok commands
+   after the 10-second preflight.
+4. For each finding, audit the whole diff for its class and fix every occurrence in
+   one commit.
+5. Stop at one clean pass from two independent reviewers on the final head plus
+   green CI on that head; re-review only the commits since the last pass.
+
 ## Report completion
 
 The PR records changed behavior, executed local selection and results, current-head
@@ -122,7 +139,8 @@ repository's template and automation markers. A cloud warning stays at the top
 until the affected local E2E has actually passed after access is restored.
 
 Call the feature ready for review only after the required CI gates and applicable
-review requirements pass. Under the cloud exception, state explicitly that local
+review requirements pass, including the review loop's stop condition for a
+non-trivial change. Under the cloud exception, state explicitly that local
 E2E remains unexecuted or partial; CI success does not turn it into a local pass.
 Creating a skill or completing this workflow does not authorize merging, deploying
 or changing shared infrastructure or credentials.
