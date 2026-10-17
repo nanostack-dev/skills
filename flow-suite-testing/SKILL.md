@@ -62,6 +62,11 @@ authorization requirements.
    count the quota's other consumers in the window (scheduled monitors and probes
    included; one whose own cadence exceeds the quota keeps it full), and fix the
    contention.
+   A runner on a host that can sleep or drop its network (a laptop, a runner embedded
+   in a CLI) loses its job lease mid-run; a lease-expired or job-token rejection is a
+   host cause, not a product one. Keep the host awake for the whole run, read its
+   sleep log for the run window, and rerun only the interrupted flows
+   ([postmortem](../docs/postmortems/2026-10-17-suite-run-host-sleep.md)).
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
