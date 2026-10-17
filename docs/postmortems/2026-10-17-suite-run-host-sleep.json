@@ -1,0 +1,228 @@
+{
+  "title": "Scheduled flow suite run reported a false failure: the laptop host slept and the embedded runner lost its job lease",
+  "short": "Suite host sleep",
+  "service": "echopoint-investigation routine (flow suites)",
+  "date": "2026-10-17",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The 19:00Z scheduled suite run started on a laptop in a 45 s battery maintenance wake. The suites run on the runner embedded in the local CLI, so when the host slept again at ~19:00:21Z, the `anchor: invitations` run stopped heartbeating and Echopoint failed it after its 30 s lease (`runner lease expired before completion`). The host slept until the lid opened at 19:22Z, so the anchor suite took 22 min instead of ~3 and reported 22/23. The flow passed twice on rerun; no product defect. The routine now runs suites through `run_suites.sh`, which holds a sleep assertion, reruns lease-expired flows once and prints the host sleep log, and the flow-suite-testing skill names host interruption as a diagnosis class.",
+  "impact": {
+    "text": "One false red flow in the anchor suite and a 22 min suite run. Dev only, no customer impact. Without the rule, the false failure could have opened a known-bugs flow or a product postmortem.",
+    "numbers": [
+      {
+        "value": "1 / 60",
+        "label": "flows falsely red"
+      },
+      {
+        "value": "22 min",
+        "label": "anchor suite (normal ~3 min)"
+      },
+      {
+        "value": "0",
+        "label": "product defects"
+      }
+    ]
+  },
+  "trigger": "The host went back to sleep at ~19:00:21Z, 45 s after the maintenance wake that started the scheduled run.",
+  "detection": "The routine saw the anchor suite still running after 22 min with `INVALID_JOB_TOKEN` and `RUNNER_JOB_COMPLETION_REJECTED` in the CLI log, then matched the gap to `pmset -g log`. A similar 2026-10-15 heartbeat reset was retried with no record, so the first occurrence was missed.",
+  "resolution": "A sleep assertion (`caffeinate`) was attached to the running suite, and the interrupted flow was rerun twice, green. `run_suites.sh` now does both by default.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-15T17:08:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Earlier heartbeat reset retried, not recorded",
+        "detail": "Run log 2026-10-15T17:08Z: one transient runner heartbeat reset, retried."
+      },
+      {
+        "t": "2026-10-17T18:59:36Z",
+        "kind": "change",
+        "label": "Maintenance wake on battery; scheduled run starts",
+        "detail": "`pmset -g log`: DarkWake from Deep Idle, rtc/Maintenance, Using BATT, 45 secs."
+      },
+      {
+        "t": "2026-10-17T19:00:14Z",
+        "kind": "note",
+        "label": "`anchor: invitations` starts on the CLI runner",
+        "detail": "Execution `01a14b3c-6f52-…`, runner_type ephemeral."
+      },
+      {
+        "t": "2026-10-17T19:00:21Z",
+        "approx": true,
+        "kind": "trigger",
+        "label": "Host sleeps mid-suite",
+        "detail": "End of the 45 s DarkWake."
+      },
+      {
+        "t": "2026-10-17T19:02:48Z",
+        "kind": "note",
+        "label": "Echopoint fails the run: lease expired",
+        "detail": "`error_message: runner lease expired before completion`; `defaultRunnerLeaseTTL = 30s` in `internal/feature/runners/job_service.go`."
+      },
+      {
+        "t": "2026-10-17T19:15:59Z",
+        "kind": "note",
+        "label": "2 s wake; heartbeat read times out",
+        "detail": "Host slept again at 19:16:01Z for 359 s."
+      },
+      {
+        "t": "2026-10-17T19:22:00Z",
+        "kind": "note",
+        "label": "Lid wake; CLI resumes, job token rejected",
+        "detail": "`401 INVALID_JOB_TOKEN`, `409 RUNNER_JOB_COMPLETION_REJECTED`; the suite continues with the next flow."
+      },
+      {
+        "t": "2026-10-17T19:22:22Z",
+        "kind": "detect",
+        "label": "Routine links the gap to host sleep"
+      },
+      {
+        "t": "2026-10-17T19:23:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Sleep assertion attached to the running suite",
+        "detail": "`caffeinate -i -w <suite pid>`"
+      },
+      {
+        "t": "2026-10-17T19:27:40Z",
+        "kind": "resolve",
+        "label": "Interrupted flow green twice on rerun",
+        "detail": "Executions `01a14b54-…` and `01a14b55-…` completed."
+      },
+      {
+        "t": "2026-10-17T19:45:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "`run_suites.sh` and skill lesson land"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The scheduled suite run reported `anchor: invitations` as failed, but the product was correct",
+    "because": [
+      {
+        "text": "Echopoint failed the execution because its runner stopped heartbeating for longer than the 30 s lease",
+        "evidence": "Execution `01a14b3c-6f52-…` error `runner lease expired before completion`; `defaultRunnerLeaseTTL = 30 * time.Second`",
+        "because": [
+          {
+            "text": "The runner was the one embedded in the local CLI, and the host went to sleep mid-run",
+            "evidence": "`flows run` launches `(ephemeral)`; `pmset -g log` DarkWake 18:59:36Z for 45 s, then Sleep until 19:22:00Z lid wake",
+            "because": [
+              {
+                "text": "The scheduler starts the routine in a short battery maintenance wake, and nothing in the run held the host awake",
+                "evidence": "`DarkWake ... rtc/Maintenance Using BATT ... 45 secs`; suite command had no `caffeinate`",
+                "because": [
+                  {
+                    "id": "R2",
+                    "root": true,
+                    "text": "The suite run procedure had no sleep guard, though it runs for minutes on a host that sleeps on its own"
+                  }
+                ]
+              },
+              {
+                "text": "Scheduled suites run on a laptop runner by design; the Cloud runner would not depend on the host",
+                "evidence": "Run notes: `echopoint flows run` executes on the CLI's embedded runner",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "Scheduled suite execution is placed on a host whose power state the routine does not control"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The false failure looked like a product failure and the first occurrence went unrecorded",
+        "evidence": "CLI shows only `✗ Flow ...: error` with a 409; 2026-10-15 run log: heartbeat reset retried, no ledger row",
+        "because": [
+          {
+            "text": "The routine had no rule that separates host interruption from product or platform failure",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "Diagnosis guidance listed product, setup, provider and quota causes, but not a runner host that sleeps or drops its network"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The laptop was on battery (39%), where macOS sleeps with the lid closed whatever assertions apps hold."
+  ],
+  "lessons": {
+    "well": [
+      "Echopoint failed the orphaned run after 30 s with a clear error message instead of leaving it running.",
+      "The CLI moved on to the next flow after the rejection, so the rest of the suite still ran."
+    ],
+    "wrong": [
+      "The 2026-10-15 occurrence was retried with no record, so the cause stayed unknown for two days."
+    ],
+    "lucky": [
+      "The user opened the lid at 19:22Z; otherwise the suite could have run for hours and overlapped a post-deploy gate (409 FLOW_TREE_CONFLICT).",
+      "The sleep hit a flow that does not own long-lived data; an interrupted run before its `always` cleanup could leave a throwaway org behind."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Run suites through `run_suites.sh`: `caffeinate -ims`, rerun lease-expired flows once, print the host sleep log for the run window",
+      "type": "prevent",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-17",
+      "status": "done",
+      "fixes": [
+        "R2",
+        "R3"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "Name host interruption (lease-expired, job-token rejection) as a diagnosis class in the flow-suite-testing skill",
+      "type": "detect",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-17",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "Decide where scheduled suites run: an always-on host (or AC power), or Cloud launches within the CI org daily budget",
+      "type": "process",
+      "owner": "workspace owner",
+      "due": "2026-10-24",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigator",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Suite run 2026-10-17T19:00Z: `anchor: invitations` false red because the laptop slept mid-run (lease expired). Rerun green twice. Suites now run under a sleep guard with an automatic rerun of host-interrupted flows.",
+    "external": "None: dev suites only."
+  },
+  "links": [
+    {
+      "label": "Report (artifact)",
+      "url": "https://claude.ai/artifact/JFgnKfLB3chZaAv2mU3RcS"
+    }
+  ]
+}
