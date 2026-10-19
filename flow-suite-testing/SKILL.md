@@ -211,6 +211,14 @@ change. Re-execute the affected suites on each required target and verify CI
 coverage. The API contract determines the correct status; this skill keeps its
 consumers aligned.
 
+When a request contract tightens (a new required header, parameter or field),
+migrate every request the suite sends: the modules and subflows a tagged run
+reaches through its callers, request definitions stored inside bodies that the
+application executes, and each node's tenancy, so a value scoped to an
+organization comes from the same organization as that node's credential. Prove
+the migration on a build that enforces the new rule; a run against the lenient
+build passes every miss ([2026-10-19 postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-10-19-workspace-header-suite-migration.md)).
+
 Read the earliest causal failure and its expected/actual evidence. A long skipped
 tail may expose false dependencies, but setup failure or the engine's cancellation
 policy can produce the same symptom. Fix the demonstrated graph or product issue.
