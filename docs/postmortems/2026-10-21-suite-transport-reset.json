@@ -1,0 +1,235 @@
+{
+  "title": "Scheduled echopoint suite reported a false failure: one TCP reset on a login failed the whole flow because the runner never retries a node",
+  "short": "Suite transport reset",
+  "service": "echopoint-investigation routine (flow suites) / echopoint-runner",
+  "date": "2026-10-21",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "In the 17:08Z scheduled suite run, `echopoint: health monitors` failed in 353 ms on its first node: the `POST https://apidev.tryanchor.dev/v1/auth/login` connection from the laptop was reset by the peer (Cloudflare edge address). Anchor was healthy: 36 other flows logged in to the same host within the same minute and passed. The runner has a retry middleware but no production code wires it, so a single transport error fails the node and the flow. `run_suites.sh` only reran lease-expired flows, so the failure was printed like a product failure and needed manual triage. Two reruns passed. `run_suites.sh` now reruns once any flow that failed on a transport error before a response from a dev API, and the flow-suite-testing skill names this diagnosis class.",
+  "impact": {
+    "text": "One false red flow in the echopoint suite (36/37). Dev APIs only, no customer impact, nothing created before the failure so nothing leaked.",
+    "numbers": [
+      {
+        "value": "1 / 61",
+        "label": "flows falsely red"
+      },
+      {
+        "value": "353 ms",
+        "label": "from start to failed"
+      },
+      {
+        "value": "0",
+        "label": "product defects"
+      }
+    ]
+  },
+  "trigger": "The TCP connection carrying the `login` POST to `apidev.tryanchor.dev` (172.64.80.1:443) was reset by the peer at 17:11:13Z.",
+  "detection": "`run_suites.sh` printed `FAILED echopoint ce39b646…: Could not connect to apidev.tryanchor.dev … connection reset by peer` at the end of the run, 91 s after the failure. Detection was good enough: the script reads each failed flow's error. Only the classification was missing.",
+  "resolution": "The flow was rerun twice by hand at 17:12:55Z and 17:12:58Z, both green. `run_suites.sh` now does the rerun itself and prints `TRANSPORT-RERUN` so the cause stays visible.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-21T17:08:08Z",
+        "kind": "note",
+        "label": "Scheduled routine run starts on AC power",
+        "detail": "`pmset -g batt`: AC Power, 100%. No sleep/wake in the run window."
+      },
+      {
+        "t": "2026-10-21T17:10:19Z",
+        "kind": "change",
+        "label": "echopoint tag starts (37 flows, embedded CLI runner)",
+        "detail": "First execution `01a15f71-3f5a…` (UUIDv7 time). Patched CLI from `feat/workspace-auth` because of the open SEV2 on released CLIs."
+      },
+      {
+        "t": "2026-10-21T17:11:13Z",
+        "kind": "trigger",
+        "label": "`login` POST reset by peer; flow fails",
+        "detail": "Execution `01a15f72-1151-728d-82f7-06feaf5776a8`, started 17:11:13.489Z, failed 17:11:13.842Z: `read tcp 192.168.2.50:52576->172.64.80.1:443: read: connection reset by peer`. Cleanup nodes skipped: no upstream output existed."
+      },
+      {
+        "t": "2026-10-21T17:12:44Z",
+        "kind": "detect",
+        "label": "run_suites.sh prints FAILED with the transport error",
+        "detail": "echopoint 36/37. The rerun rule only matched `runner lease expired before completion`."
+      },
+      {
+        "t": "2026-10-21T17:12:55Z",
+        "kind": "mitigate",
+        "label": "Rerun 1 green",
+        "detail": "Execution `01a15f73-a148-7b63-a81a-c0a1c79347c8`, 2000 ms."
+      },
+      {
+        "t": "2026-10-21T17:12:58Z",
+        "kind": "resolve",
+        "label": "Rerun 2 green",
+        "detail": "Execution `01a15f73-aae0-7c49-be93-82dc84e34246`, 2135 ms."
+      },
+      {
+        "t": "2026-10-21T17:40:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "run_suites.sh reruns transport failures once; skill lesson"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The scheduled echopoint suite reported `echopoint: health monitors` red with no product defect",
+    "because": [
+      {
+        "text": "Its first node `login` failed `CONNECTION_FAILED`: the TCP connection to apidev.tryanchor.dev was reset by the peer",
+        "evidence": "runs/2026-10-21T17/echopoint.log line 40: `error_code: CONNECTION_FAILED … read: connection reset by peer`",
+        "because": [
+          {
+            "text": "The reset came from the path between the laptop and Cloudflare's edge, not from Anchor: 36 flows logged in to the same host that minute",
+            "evidence": "Same run: 36/37 echopoint and 24/24 anchor green; apidev.tryanchor.dev /health HEALTHY 23dc3796 at 17:08Z",
+            "because": [
+              {
+                "text": "Which hop sent the reset (home router, ISP, Cloudflare edge closing a pooled keep-alive connection) is not known",
+                "open": true
+              },
+              {
+                "id": "R2",
+                "root": true,
+                "text": "The dogfood suites run from a laptop on a residential network, not from a host with a stable, observed network path",
+                "evidence": "Same host decision as the 2026-10-17 host-sleep postmortem (action A3 there, still open)"
+              }
+            ]
+          },
+          {
+            "text": "One transport error failed the whole flow: the runner never retries a node, and flows have no per-node retry option",
+            "evidence": "echopoint-runner v0.94.0 and main: `engine.Retry` / `runner.Retry` are called only from tests and docs (`git grep 'Retry('`)",
+            "because": [
+              {
+                "text": "Go's http.Transport replays a request on a dead connection only when it is idempotent; the login is a POST",
+                "evidence": "net/http Transport docs: retries only idempotent requests (or ones with an Idempotency-Key header) on reused connections",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "No runner policy says when a transport failure before any response is safe to replay (method, http_calls counting, limits)"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Why so bad: the run printed the failure like a product failure and needed manual triage",
+        "evidence": "run_suites.sh printed `FAILED echopoint ce39b646…`, not a rerun",
+        "because": [
+          {
+            "text": "run_suites.sh reran only lease-expired flows; transport errors fell through to FAILED",
+            "evidence": "run_suites.sh before 2026-10-21: one branch on `runner lease expired before completion`",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The suite's host-cause rules listed one class (lease expiry) instead of every failure that happens before the product answers"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The suites currently run on a CLI built from an unmerged branch (open SEV2 on released CLIs), so the run already carried manual steps.",
+    "The node error carries a code (`CONNECTION_FAILED`) in the runner log but the execution list only returns the message, so the script matches message prefixes."
+  ],
+  "lessons": {
+    "well": [
+      "run_suites.sh reads each failed flow's error, so the transport cause was visible in the run output.",
+      "The runner's error classifier named the class (`CONNECTION_FAILED`) and kept the raw cause."
+    ],
+    "wrong": [
+      "The host-cause rule from 2026-10-17 covered one symptom, not the class.",
+      "A runner retry middleware has existed for months without a production caller or a decision on it."
+    ],
+    "lucky": [
+      "The reset hit the first node. On a create node (for example `create-org`) after the server had written, the `always` cleanup that reads its output would be skipped (`Source node not executed yet`) and a throwaway org could leak.",
+      "The suite is dev-only; the same reset on a Cloud monitor would fail a customer's run with no replay."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Decide and implement a runner policy for transport failures before any response: e.g. replay once for idempotent methods or nodes marked retryable, count the replay in `http_calls`",
+      "type": "prevent",
+      "owner": "echopoint-runner maintainers",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`run_suites.sh` reruns once a flow that failed on a transport error (connect/reset, refused, TLS, DNS) before a response from a dev API and prints `TRANSPORT-RERUN`; a second failure stays FAILED",
+      "type": "mitigate",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-21",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "flow-suite-testing skill: a transport failure before a response is a host or network cause; rerun once, a repeat is an outage",
+      "type": "process",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-21",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Decide the suite host (always-on host or Cloud launches); same decision as the 2026-10-17 host-sleep postmortem A3",
+      "type": "prevent",
+      "owner": "workspace owner",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "Sweep throwaway Anchor orgs that outlive their flow run (dev nanostack product), so a skipped cleanup cannot accumulate",
+      "type": "detect",
+      "owner": "echopoint-investigation routine maintainers",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R2"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigator",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Suite 17:08Z: `echopoint: health monitors` red on a TCP reset to apidev.tryanchor.dev (laptop network), green on rerun x2. No product defect. run_suites.sh now reruns transport failures once.",
+    "external": "None: dev only."
+  },
+  "links": [
+    {
+      "label": "Report (artifact)",
+      "url": "https://claude.ai/artifact/A5GaVMm56qRjpfeiGmGiKT"
+    },
+    {
+      "label": "Previous host-cause postmortem (2026-10-17)",
+      "url": "https://claude.ai/artifact/JFgnKfLB3chZaAv2mU3RcS"
+    }
+  ]
+}

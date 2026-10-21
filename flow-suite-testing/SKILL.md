@@ -63,10 +63,13 @@ authorization requirements.
    included; one whose own cadence exceeds the quota keeps it full), and fix the
    contention.
    A runner on a host that can sleep or drop its network (a laptop, a runner embedded
-   in a CLI) loses its job lease mid-run; a lease-expired or job-token rejection is a
-   host cause, not a product one. Keep the host awake for the whole run, read its
-   sleep log for the run window, and rerun only the interrupted flows
-   ([postmortem](../docs/postmortems/2026-10-17-suite-run-host-sleep.md)).
+   in a CLI) produces host causes, not product ones: a lease-expired or job-token
+   rejection, and a transport failure before any response (connection reset or
+   refused, TLS, DNS), which fails the node because the runner replays nothing. Keep
+   the host awake for the whole run, read its sleep log for the run window, and rerun
+   only the interrupted flows, once; a repeat on the rerun is an outage to diagnose
+   ([sleep](../docs/postmortems/2026-10-17-suite-run-host-sleep.md),
+   [reset](../docs/postmortems/2026-10-21-suite-transport-reset.md)).
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
