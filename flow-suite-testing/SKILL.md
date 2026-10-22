@@ -27,6 +27,9 @@ schemas and supported management interfaces. Identify:
   untestable until it ships.
 - The engine version each gate executes on. A runner embedded in a CLI can lag the
   server's hosted runner; test new engine semantics on the runner that ships them.
+- The client configuration each gate launches with. Keep at least one gate on the
+  released client in its default configuration (no optional selection set); a gate
+  that pins every option misses what most users run ([blank header](https://github.com/nanostack-dev/echopoint-cli/blob/main/docs/postmortems/2026-10-22-blank-workspace-header.md)).
 
 Engines differ in syntax and execution semantics. Use only capabilities verified
 in the current tool's help, schema, documentation or source. When binding an
