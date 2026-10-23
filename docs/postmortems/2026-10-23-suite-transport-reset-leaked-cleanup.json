@@ -1,0 +1,271 @@
+{
+  "title": "Suite transport resets came back and one hit an `always` cleanup: a test product leaked on dev while the rerun reported green",
+  "short": "Reset leaked cleanup",
+  "service": "echopoint-investigation routine (flow suites) / echopoint-runner",
+  "date": "2026-10-23",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "Regression of the [2026-10-21 suite transport reset](2026-10-21-suite-transport-reset.md). In the 17:08Z scheduled run, two anchor flows failed on TCP resets from the Cloudflare edge within one minute: `anchor: resource-permission` on its `always` cleanup `DELETE /v1/products/{id}` (14 ms) and `anchor: auth` on a `POST /v1/auth/refresh` (21 ms). `run_suites.sh` reran both, as the 2026-10-21 fix intended, and both passed, so the run read 25/25. The failed cleanup had left product `prd_3L6X…` on dev Anchor; the green rerun created and deleted its own product, so nothing reported the leftover. The routine found it by reading the failed execution's node results and deleted it at 17:15Z. `run_suites.sh` now prints `TRANSPORT-LEAK` for every `always` node that did not complete, and the flow-suite-testing skill says to clean before trusting a rerun.",
+  "impact": {
+    "text": "One throwaway product left on dev Anchor for about 5 minutes; two false red flows, both cleared by the automatic rerun. Dev APIs only, no customer impact.",
+    "numbers": [
+      {
+        "value": "1",
+        "label": "test product leaked"
+      },
+      {
+        "value": "2 / 64",
+        "label": "flows falsely red"
+      },
+      {
+        "value": "14 ms",
+        "label": "DELETE start to reset"
+      }
+    ]
+  },
+  "trigger": "At 17:10:14Z the `cleanup-product` DELETE of `anchor: resource-permission` to `apidev.tryanchor.dev` (172.64.80.1:443) was reset by the peer before any response byte.",
+  "detection": "`run_suites.sh` printed `TRANSPORT-RERUN` for both flows at about 17:13:42Z and both reruns passed. The leak itself was found only because the routine read the failed execution's node results by hand (`GET /flows/{id}/executions/{exec}/nodes`: `cleanup-product` failed with input `prd_3L6X…`). Detection of the leak was not good enough: nothing in the script looked at side effects of a failed run (fixed by A2).",
+  "resolution": "A one-off flow logged in, read the product (200), deleted it (204) and read it again (404) at 17:15:12Z; the flow was deleted after. `run_suites.sh` now reports every `always` node of a transport-failed execution that did not complete, with its method, path and inputs, before the rerun.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-21T17:11:13Z",
+        "kind": "change",
+        "label": "First transport reset; fix = rerun transport failures once",
+        "detail": "[SEV4 suite transport reset](2026-10-21-suite-transport-reset.md). Its lucky list named this exact risk: a reset on a create or cleanup node can leak a resource. Runner replay (A1) and a sweep (A5) stayed open for humans."
+      },
+      {
+        "t": "2026-10-22T05:10:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Ledger row moved to verified after two clean runs"
+      },
+      {
+        "t": "2026-10-23T17:08:47Z",
+        "kind": "note",
+        "label": "Scheduled run starts on AC power, released CLI v3.3.1",
+        "detail": "`pmset -g batt`: AC Power; no sleep/wake in the run window. No merges since the previous run; dev+prod at main."
+      },
+      {
+        "t": "2026-10-23T17:10:14Z",
+        "kind": "trigger",
+        "label": "Cleanup DELETE reset by peer; product left behind",
+        "detail": "Execution `01a169bd-d0c4-7244-bd20-d6d30f7d555e`, node `cleanup-product`: `http_calls` status 0, response_bytes 0, 14 ms, `read tcp 192.168.2.50:56982->172.64.80.1:443: read: connection reset by peer`."
+      },
+      {
+        "t": "2026-10-23T17:11:09Z",
+        "kind": "note",
+        "label": "Second reset: POST /v1/auth/refresh in `anchor: auth`",
+        "detail": "Execution `01a169be-6dbf-7258-b467-58f5bfbe8987`, node `replay-rotated-token`, 21 ms. The same second the runner's progress POST to `api.echopoint.dev` (same edge IP) was also reset."
+      },
+      {
+        "t": "2026-10-23T17:13:42Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "run_suites.sh prints TRANSPORT-RERUN for both flows",
+        "detail": "Reruns `01a169c1-0fc1…` and `01a169c1-2232…` completed. The run reads anchor 25/25, echopoint 39/39."
+      },
+      {
+        "t": "2026-10-23T17:14:30Z",
+        "approx": true,
+        "kind": "escalate",
+        "label": "Routine reads failed node results: cleanup-product failed",
+        "detail": "Input `create-product.productId = prd_3L6XIOLyPW33ACl1ObuXOgN5Hkl`."
+      },
+      {
+        "t": "2026-10-23T17:15:12Z",
+        "kind": "resolve",
+        "label": "One-off flow deletes the leaked product (204, then 404)",
+        "detail": "Execution `01a169c2-6eba…`; get-before 200, delete 204, get-after 404. Temporary flow deleted."
+      },
+      {
+        "t": "2026-10-23T17:40:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "TRANSPORT-LEAK report in run_suites.sh; skill line"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "A scheduled suite run left a test product on dev Anchor and still reported all flows green",
+    "because": [
+      {
+        "text": "The `always` cleanup DELETE of `anchor: resource-permission` failed on a TCP reset, so the product it owned was never deleted",
+        "evidence": "Node results of execution `01a169bd…`: `cleanup-product` failed `CONNECTION_FAILED`, `status_codes [0]`, input `prd_3L6X…`; the one-off GET at 17:15Z returned 200",
+        "because": [
+          {
+            "text": "Zero response bytes 14 ms after start: the request went onto a pooled keep-alive connection the edge had already dropped",
+            "evidence": "`http_calls[0].durations_ms [14]`, `response_bytes [0]`; the refresh POST failed the same way in 21 ms. A new TLS connection to the edge cannot be set up in that time",
+            "because": [
+              {
+                "text": "Which hop drops the idle connections (home router, ISP, Cloudflare edge) is not known",
+                "open": true
+              },
+              {
+                "id": "R2",
+                "root": true,
+                "text": "The dogfood suites still run from a laptop on a residential network, not from a host with an observed network path",
+                "evidence": "Same decision as 2026-10-21 A4 and 2026-10-17 A3, both still open"
+              }
+            ]
+          },
+          {
+            "text": "Nothing replayed it: Go's transport replays on a dead reused connection only GET/HEAD/OPTIONS/TRACE; the runner adds no retry",
+            "evidence": "net/http `Request.isReplayable`; echopoint-runner `pkg/node/cloud_dial.go` uses `&http.Client{}` for non-Cloud jobs; `engine.Retry` has no production caller (2026-10-21 evidence)",
+            "because": [
+              {
+                "text": "Why the 2026-10-21 fix did not hold: it fixed how the suite reports a reset, and left the replay policy as an open human action",
+                "evidence": "2026-10-21 A1 status open, due 2026-11-04; the ledger row went to verified after two runs with no reset",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "The runner treats a transport failure before any response as final even for an idempotent DELETE or PUT"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Why so bad: the run reported green, so the leak would have stayed unseen",
+        "evidence": "run_suites.sh output: `TRANSPORT-RERUN` then `✓ Flow 7371aec8…: completed`; anchor 25/25",
+        "because": [
+          {
+            "text": "The rerun creates and deletes its own product, so its success says nothing about what the failed run left",
+            "evidence": "`anchor: resource-permission` creates a new product on every run (`create-product` POST)",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The transport rerun rule assumed a failed run has no side effects and never read its cleanup nodes",
+                "evidence": "run_suites.sh before 2026-10-23: the transport branch only printed the error and reran"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Why so bad: a leaked test resource stays on dev until someone deletes it by hand",
+        "evidence": "The product was still readable (200) 5 minutes after the failure",
+        "because": [
+          {
+            "text": "Cleanup exists only inside the run: a suite-made product carries no owner mark or expiry an outside process could act on",
+            "evidence": "`anchor: resource-permission` names its product per run; Anchor products have no TTL field",
+            "because": [
+              {
+                "text": "The suites were designed so each run owns its data, with in-run `always` cleanup as the only removal path",
+                "evidence": "Run notes: throwaway-org pattern; flow-suite-testing 'Cleanup survives failure'",
+                "because": [
+                  {
+                    "id": "R4",
+                    "root": true,
+                    "text": "No sweep removes suite-made Anchor products or orgs that outlive their run",
+                    "evidence": "2026-10-21 A5 open; the 2026-10-21 lucky list predicted this leak"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The runner labels a read reset on an established connection as `transport_errors: connect` and `Could not connect to …`, which reads like a connect failure, not a dead pooled connection.",
+    "The ledger moved the 2026-10-21 row to verified after two runs without a reset while its prevention actions were still open, so the recurrence first looked like a new event."
+  ],
+  "responders": [
+    {
+      "role": "Investigator",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "links": [
+    {
+      "label": "Report (artifact)",
+      "url": "https://claude.ai/artifact/PvrHKWsmkFEKZYV7jhBv7m"
+    },
+    {
+      "label": "First occurrence (2026-10-21 postmortem)",
+      "url": "https://claude.ai/artifact/A5GaVMm56qRjpfeiGmGiKT"
+    }
+  ],
+  "lessons": {
+    "well": [
+      "The 2026-10-21 rerun rule turned two resets into an automatic, labelled rerun instead of a manual triage.",
+      "Node results keep the cleanup's inputs (`create-product.productId`), so the leaked id was one request away."
+    ],
+    "wrong": [
+      "A lucky-list item (reset on a cleanup leaks data) became no guard; it happened two days later.",
+      "A green rerun was read as a clean run."
+    ],
+    "lucky": [
+      "The leaked resource was a product with no members or keys; a leaked throwaway org would also hold a live 15-minute org API key until it expires.",
+      "The reset hit the cleanup, which reads back cleanly. On a create POST after the server wrote, the product id would be unknown and no node result would name it."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Runner replays once a DELETE or PUT whose connection failed before any response byte (2026-10-21 A1, now with evidence: dead pooled keep-alive connections); count the replay in `http_calls`",
+      "type": "prevent",
+      "owner": "echopoint-runner maintainers",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`run_suites.sh` prints `TRANSPORT-LEAK <flow> <node> <status> <method> <path> <inputs>` for every `always` node of a transport-failed execution that did not complete, before the rerun",
+      "type": "detect",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-23",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "flow-suite-testing skill: before rerunning an interrupted flow, delete what its uncompleted cleanup nodes still own",
+      "type": "process",
+      "owner": "echopoint-investigation routine",
+      "due": "2026-10-23",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Decide the suite host (always-on host or Cloud launches); same decision as 2026-10-21 A4",
+      "type": "prevent",
+      "owner": "workspace owner",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "Sweep suite-made Anchor products and throwaway orgs on dev that outlive their run (2026-10-21 A5)",
+      "type": "mitigate",
+      "owner": "echopoint-investigation routine maintainers",
+      "due": "2026-11-04",
+      "status": "open",
+      "fixes": [
+        "R4"
+      ]
+    }
+  ]
+}
