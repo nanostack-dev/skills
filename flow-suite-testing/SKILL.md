@@ -73,6 +73,10 @@ authorization requirements.
    only the interrupted flows, once; a repeat on the rerun is an outage to diagnose
    ([sleep](../docs/postmortems/2026-10-17-suite-run-host-sleep.md),
    [reset](../docs/postmortems/2026-10-21-suite-transport-reset.md)).
+   Before the rerun, read the interrupted execution's cleanup nodes and delete what
+   each one that did not complete still owns: the rerun creates its own data, so its
+   green result says nothing about the first run's leftovers
+   ([leaked cleanup](../docs/postmortems/2026-10-23-suite-transport-reset-leaked-cleanup.md)).
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
