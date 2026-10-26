@@ -30,6 +30,10 @@ schemas and supported management interfaces. Identify:
 - The client configuration each gate launches with. Keep at least one gate on the
   released client in its default configuration (no optional selection set); a gate
   that pins every option misses what most users run ([blank header](https://github.com/nanostack-dev/echopoint-cli/blob/main/docs/postmortems/2026-10-22-blank-workspace-header.md)).
+- The credential each scheduled run signs in with, and when it expires. An unattended
+  run signs in with an organization API key and checks it before launching; a
+  person's browser session expires between runs and leaves the suite blind until
+  someone signs in again ([expired session](../docs/postmortems/2026-10-26-suite-cli-session-expired.md)).
 
 Engines differ in syntax and execution semantics. Use only capabilities verified
 in the current tool's help, schema, documentation or source. When binding an

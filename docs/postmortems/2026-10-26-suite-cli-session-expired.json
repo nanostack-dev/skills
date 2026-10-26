@@ -1,0 +1,236 @@
+{
+  "title": "Suite run blind: the routine's prod CLI session expired after 7 days and nothing could renew it",
+  "short": "Suite CLI session expired",
+  "service": "echopoint-investigation routine (prod-org flow suites on dev)",
+  "date": "2026-10-26",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The 23:08Z run of the scheduled flow-suite routine checked no flow: both `flows run --tag` calls exited 1 with `stored credentials have expired`. The routine's `prod` CLI profile held only a browser session, a JWT with a fixed 7-day life and no refresh token, signed in on 2026-10-19T20:21Z; it expired at 2026-10-26T20:21Z. Nothing warned before expiry, the CLI never falls back to a stored API key once a session expired, and the routine cannot sign in by itself. Post-deploy gates and the Daily schedule were unaffected (they use their own credentials), and no backend change merged in the window. The suite runner now checks the credential before launching; a CLI fallback awaits review; a human must store a CI-org API key to end the class.",
+  "impact": {
+    "text": "One routine run (of four a day) checked 0 of 66 flows; coverage of new dev merges stays blind until a human signs in again. Customers saw nothing: the flows only target dev, and the gates and Daily schedule run with separate credentials.",
+    "numbers": [
+      {
+        "value": "0 / 66",
+        "label": "flows checked at 23:08Z"
+      },
+      {
+        "value": "7 days",
+        "label": "fixed session life, no refresh"
+      },
+      {
+        "value": "2 h 47 min",
+        "label": "from expiry to detection"
+      }
+    ]
+  },
+  "trigger": "The `prod` profile's session JWT reached its `exp` at 2026-10-26T20:21:26Z.",
+  "detection": "The next scheduled run (23:08Z) saw both suite launches exit 1 within a second; `anchor.log` and `echopoint.log` held `stored credentials have expired`. The expiry date had been visible in `echopoint auth status` for 7 days, but nothing read it.",
+  "resolution": "Not resolved by the routine: re-authentication needs a person at a browser, and the routine never enters credentials. `run_suites.sh` now stops with `AUTH-EXPIRED` and warns `AUTH-EXPIRES-SOON` 48 h ahead; a CLI change lets a stored API key replace an expired session.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-19T20:21:26Z",
+        "kind": "change",
+        "label": "Prod CLI profile signed in by browser (7-day JWT)",
+        "detail": "`exp` minus 7 days; the login is also noted in the routine's Run notes (credential written without `organization_id`)."
+      },
+      {
+        "t": "2026-10-26T17:20:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Last green suite run ends (anchor 27/27, echopoint 39/39)"
+      },
+      {
+        "t": "2026-10-26T20:21:26Z",
+        "kind": "trigger",
+        "label": "Session JWT expires",
+        "detail": "`~/.echopoint/credentials/prod.json` `expires_at` 2026-10-26T16:21:26-04:00, keys `access_token`, `expires_at`, `organization_id`: no refresh token, no API key."
+      },
+      {
+        "t": "2026-10-26T23:08:47Z",
+        "kind": "detect",
+        "label": "Both suite tags exit 1: credentials expired",
+        "detail": "`run_suites.sh` output `anchor: exit 1 pass 0 fail 0`, `echopoint: exit 1 pass 0 fail 0`."
+      },
+      {
+        "t": "2026-10-26T23:30:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Preflight added: AUTH-EXPIRED / AUTH-EXPIRES-SOON",
+        "detail": "The runner now stops with an actionable line and warns 48 h before the next expiry."
+      },
+      {
+        "t": "2026-10-26T23:45:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Impact bounded: run reported, human sign-in requested",
+        "detail": "Suites stay blind until a person signs in or stores an API key (action A1)."
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The 23:08Z routine run checked no flow, so a dev regression merged now would go unseen",
+    "because": [
+      {
+        "text": "Every `flows run --profile prod` exited 1 with `stored credentials have expired` before launching",
+        "evidence": "`runs/2026-10-26T2308/anchor.log` and `echopoint.log`",
+        "because": [
+          {
+            "text": "The prod profile held only a browser session: a JWT with a fixed 7-day `exp` and no refresh token",
+            "evidence": "`prod.json` keys; `tokenExpiry` reads `exp` from the JWT (`echopoint-cli/internal/auth/browser.go`)",
+            "because": [
+              {
+                "text": "The routine runs unattended four times a day but signs in as a person, the way an interactive user does",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "No non-expiring credential (a CI-org API key) is set up for unattended suite runs on the routine host"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "text": "A stored API key would not have helped: the CLI fails on an expired session before it looks at a stored key",
+            "evidence": "`resolveToken` returns the expiry error before `resolveStoredAPIKey` (`internal/commands/root.go`); `echopoint mcp` already falls back (`mcp.go`)",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "CLI command auth treats an expired session as fatal even when a stored (or preferred) API key exists"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Nobody knew ahead: the expiry date sat in `auth status` for 7 days and the run found out only after the fact",
+        "because": [
+          {
+            "text": "`run_suites.sh` launched the suites without reading the credential",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The suite runner had no credential preflight and no warning before expiry"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Recovery waits for a person: the routine cannot sign in by itself and must not handle passwords",
+        "because": [
+          {
+            "text": "Browser sign-in is the only credential the host holds, and it needs a person at a browser",
+            "because": [
+              {
+                "id": "R4",
+                "root": true,
+                "text": "The routine has no credential path it can renew without a person (same gap as R1)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The `dev` profile (used by the `echopoint_dev` MCP) is a browser session too and expires at 2026-10-27T03:03Z.",
+    "The 2026-10-19 sign-in already broke one run (missing `organization_id`); that fix pinned the org but did not question the credential type."
+  ],
+  "lessons": {
+    "well": [
+      "The CLI error named the cause and the fix, so diagnosis took one command.",
+      "Gates and the Daily schedule use separate credentials, so prod promotion checks were unaffected."
+    ],
+    "wrong": [
+      "A known expiry date went unread for 7 days.",
+      "The CLI's fallback to a stored API key works in `echopoint mcp` but not in commands, so the obvious mitigation would also have failed."
+    ],
+    "lucky": [
+      "No echopoint, anchor, runner or CLI change merged during the blind window.",
+      "The expiry hit between runs, not during one: a mid-run expiry would have left half-run flows and leaked cleanup."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Create a CI-org API key for the routine and store it on the host with `echopoint auth login --profile prod --api-key <key> --default` (and the same for `dev` if the dev MCP must stay up); sign in again meanwhile",
+      "type": "prevent",
+      "owner": "Workspace owner (human)",
+      "due": "2026-10-28",
+      "status": "open",
+      "fixes": [
+        "R1",
+        "R4"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "CLI commands fall back to a stored API key when the session expired, like `echopoint mcp`",
+      "type": "prevent",
+      "owner": "echopoint-cli maintainers",
+      "due": "2026-10-30",
+      "status": "open",
+      "ticket": {
+        "label": "echopoint-cli#81",
+        "url": "https://github.com/nanostack-dev/echopoint-cli/pull/81"
+      },
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "`run_suites.sh` preflight: stop with `AUTH-EXPIRED`, warn `AUTH-EXPIRES-SOON` 48 h ahead, skip when an API key is preferred",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "flow-suite-testing skill: an unattended run signs in with an org API key and checks it before launching",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R3"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and write-up",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Flow suites did not run at 23:08Z: the routine's prod CLI session expired (7-day browser JWT). Please sign in again, ideally store a CI-org API key with `--default`. Gates and Daily are unaffected.",
+    "external": "None: dev-only test infrastructure."
+  },
+  "links": [
+    {
+      "label": "Postmortem report",
+      "url": "https://claude.ai/artifact/MHmBmRaALmA1yYysNNbJpv"
+    },
+    {
+      "label": "echopoint-cli#81 (A2, waiting review)",
+      "url": "https://github.com/nanostack-dev/echopoint-cli/pull/81"
+    },
+    {
+      "label": "Suite run host sleep (earlier routine-host postmortem)",
+      "url": "https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-17-suite-run-host-sleep.md"
+    }
+  ]
+}
