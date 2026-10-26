@@ -117,6 +117,9 @@ alone does not establish concurrency.
   record need explicit ordering or separate records.
 - Make all other input valid in a negative case, so its assertion identifies one
   cause. A duplicate case must reach the duplicate rule, not fail body validation.
+- Send each create operation's **minimum contract body** once: only the schema's
+  required properties. Fixtures that fill every optional field hide a server
+  that requires one the contract marks optional.
 - Check baseline totals or empty lists **before every write in their scope**.
   Adding an unrelated writer later can invalidate that ordering. Post-write totals
   depend on all relevant writes; isolate the scope or assert a verified delta.
