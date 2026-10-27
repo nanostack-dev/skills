@@ -24,6 +24,7 @@ Name the class on every finding, in specs, prompts and commits.
 | C. Input validation | Every enum, sort field, filter value and cursor is validated. An unknown value answers 400, never a silent fallback. Validation runs before any early return (empty scope, cache hit, zero rows), so one request answers the same status whatever data the caller has. |
 | D. Untrusted decoding and round-trip fidelity | A decoded cursor or token is hostile input: malformed, truncated, oversized, bound to another sort or filter, wrong types. A value survives encode, decode and query unchanged: timestamp precision and zone, floats, 64-bit integers through JSON, NULL, Unicode, ties on the sort key. |
 | E. Frontend async state | A stale or out-of-order response never overwrites newer state: cancel or ignore superseded requests. Double submit, unmount during flight, per-request loading and error flags, paging state reset when filter or sort changes, debounced input against submit. |
+| F. Project coding standards | When the repository has `CODING_STANDARDS.md`, every changed hunk follows each of its rules. These are the maintainer's recurring review corrections (for example comment density, unrequested scope, names); report them like defects. |
 
 ## 1. Design review gate
 
@@ -81,11 +82,13 @@ C. Enum, sort, filter and cursor validation, including validation before early
    returns.
 D. Untrusted cursor or value decoding, and value round-trip fidelity.
 E. Frontend async state races.
+F. Every rule in <repo>/CODING_STANDARDS.md, when that file exists.
 
 Report every concrete defect, not only the top few, each as:
-  [class A-E or other] file:line | failing scenario | minimal fix
-Report only defects that produce wrong behavior, data loss, a security hole or an
-unsafe rollout. No refactors, no style nits, no speculative hardening.
+  [class A-F or other] file:line | failing scenario | minimal fix
+Report defects that produce wrong behavior, data loss, a security hole or an
+unsafe rollout, and every class F violation tagged [standards]. No refactors or
+style nits outside CODING_STANDARDS.md, no speculative hardening.
 Finish with exactly one line: VERDICT: CLEAN  or  VERDICT: <n> DEFECTS
 ```
 
