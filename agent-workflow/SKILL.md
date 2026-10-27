@@ -92,8 +92,10 @@ then re-check. After the merge, confirm the deploy reached the first environment
 before stacking further merges on it
 ([postmortem](https://claude.ai/artifact/QYZEjvL4x5vhfBhyC9ntip)).
 
-Wait for the results on the current PR head. For a product failure, reproduce it
-locally in the affected area, repair it, rerun the local selection and then push.
+Keep working while CI runs on the current PR head: a CI monitor that wakes the
+session, or one background `gh pr checks <n> --watch --fail-fast`. Never poll in a
+`sleep` loop. For a product failure, read the failing log, reproduce it with the
+CI-equivalent command, repair it, rerun the local selection and then push.
 For a runner or provider failure, retain its evidence and retry only after a
 confirmed transient condition or a relevant correction. Repeated identical failures
 without new evidence require diagnosis or a concrete access/input request, not
@@ -124,7 +126,8 @@ For a non-trivial change, run the loop in [review-loop](references/review-loop.m
 2. Start external review at the first push, in parallel with CI and the complete
    suite; slice the review by area above about 40 changed files.
 3. Send reviewers the standing prompt template, which asks for every defect with
-   file:line, scenario and minimal fix. Use its verified Codex and Grok commands
+   file:line, scenario and minimal fix, and checks the repository's
+   `CODING_STANDARDS.md` when present. Use its verified Codex and Grok commands
    after the 10-second preflight.
 4. For each finding, audit the whole diff for its class and fix every occurrence in
    one commit.
