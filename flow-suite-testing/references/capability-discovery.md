@@ -17,7 +17,7 @@ Use small disposable probes for behavior that documentation leaves ambiguous.
 | Updates | Supported authoring interfaces and schema; merge versus replacement behavior; preservation of unrelated metadata |
 | Graph execution | Edge semantics; branch concurrency; failure propagation; cancellation; valid cycles or repetition |
 | Cleanup | Always/finally support; waiting for failed branches; output availability after a failed assertion; cancellation fallback and ownership ledger |
-| References | Exact output/interpolation syntax; ancestor requirements; missing-value handling; literal-template escaping and repeated expansion |
+| References | Exact output/interpolation syntax; ancestor requirements; missing-value handling; literal-template escaping and repeated expansion; what a loop or subflow body can read (often only flow inputs and its item: carry upstream outputs inside the items, and validate the static checker accepts item references) |
 | Variables | Available scopes, precedence and overlays; secure input mechanisms; generator evaluation time and subflow input binding |
 | Assertions | Supported extractors/operators and their types; exact versus substring matching; expected/actual diagnostics; templated assertion values |
 | Polling | Native polling or supported harness loop; input visibility; deadlines, intervals and final failure evidence |
