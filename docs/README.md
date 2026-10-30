@@ -5,7 +5,7 @@ Start with [agent guidance](../AGENTS.md), [vocabulary](../CONTEXT.md) and the [
 - [Architecture](technical/architecture.md).
 - [Setup](development/setup.md), [testing](development/testing.md), [troubleshooting](development/troubleshooting.md).
 - [Publishing](runbooks/deployment.md), [rollback](runbooks/rollback.md), [ADRs](adr/README.md).
-- Existing postmortems: [flow-count race](postmortems/2026-10-05-specs-flow-count-race.md), [search-indexing race](postmortems/2026-10-06-specs-search-indexing-race.md), [suite run host sleep](postmortems/2026-10-17-suite-run-host-sleep.md), [suite transport reset](postmortems/2026-10-21-suite-transport-reset.md), [reset leaked cleanup](postmortems/2026-10-23-suite-transport-reset-leaked-cleanup.md), [suite CLI session expired](postmortems/2026-10-26-suite-cli-session-expired.md). Each has its `.json` source and the standalone `.html` report beside it.
+- Existing postmortems: [flow-count race](postmortems/2026-10-05-specs-flow-count-race.md), [search-indexing race](postmortems/2026-10-06-specs-search-indexing-race.md), [suite run host sleep](postmortems/2026-10-17-suite-run-host-sleep.md), [suite transport reset](postmortems/2026-10-21-suite-transport-reset.md), [reset leaked cleanup](postmortems/2026-10-23-suite-transport-reset-leaked-cleanup.md), [suite CLI session expired](postmortems/2026-10-26-suite-cli-session-expired.md), [suite host TLS blackhole](postmortems/2026-10-30-suite-host-network-tls.md). Each has its `.json` source and the standalone `.html` report beside it.
 - Skill-owned examples/resources remain beside their SKILL.md; the catalog supplies their entry points.
 
 New optional research/postmortems should capture actual evidence and prevention.
