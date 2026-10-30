@@ -77,6 +77,10 @@ authorization requirements.
    only the interrupted flows, once; a repeat on the rerun is an outage to diagnose
    ([sleep](../docs/postmortems/2026-10-17-suite-run-host-sleep.md),
    [reset](../docs/postmortems/2026-10-21-suite-transport-reset.md)).
+   Before launching, prove the host reaches the target with the suite's own client:
+   a probe on another TLS stack (system curl) can pass while the client's handshakes
+   go unanswered, and a launch that selects no flows is a blind run, not a result
+   ([TLS blackhole](../docs/postmortems/2026-10-30-suite-host-network-tls.md)).
    Before the rerun, read the interrupted execution's cleanup nodes and delete what
    each one that did not complete still owns: the rerun creates its own data, so its
    green result says nothing about the first run's leftovers

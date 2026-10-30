@@ -1,0 +1,266 @@
+{
+  "title": "Scheduled flow suites ran blind: the host's VPN dropped Go TLS handshakes while curl still worked",
+  "short": "Suite host TLS blackhole",
+  "service": "echopoint-investigation routine (prod-org dogfood suites on dev APIs)",
+  "date": "2026-10-30",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The 05:08Z scheduled run of the anchor and echopoint dogfood suites checked **0 of 68 flows**. Both tags exited 3 before launching anything: the CLI could not finish a TLS handshake with `api.echopoint.dev`. The laptop that hosts the suites routes IPv4 through a VPN tunnel, and on that path TLS handshakes from Go, Python and OpenSSL got no answer for an hour or more, even with a 166-byte ClientHello. SecureTransport curl on the same path still worked, so the usual `/health` probe said the network was fine. `run_suites.sh` now probes the control plane with the CLI itself and stops with `NETWORK-DOWN` instead of reporting `pass 0 fail 0`. Product coverage did not change: the CI post-deploy gate had run the anchor suite green on the same commits at 04:21Z.",
+  "impact": {
+    "text": "One scheduled suite run produced no result. No customer impact and no product signal lost: dev and prod already served the commits the CI gate had tested. About 60 min of routine time went to diagnosis instead of coverage.",
+    "numbers": [
+      {
+        "value": "0 / 68",
+        "label": "flows checked in the 05:08Z run"
+      },
+      {
+        "value": "60+ min",
+        "label": "CLI unable to complete TLS"
+      },
+      {
+        "value": "0",
+        "label": "customer-visible effects"
+      }
+    ]
+  },
+  "trigger": "At 05:08:17Z `run_suites.sh` started both tags; each `flows run --tag` timed out on `POST https://api.echopoint.dev/flows/search` and exited 3.",
+  "detection": "The routine read `anchor: exit 3 pass 0 fail 0` at 05:09:56Z. The cause took longer: a curl `/health` probe answered 200 in 40 ms, which pointed away from the network until Go, Python and OpenSSL handshakes were tested one by one.",
+  "resolution": "No mitigation was in the routine's reach: changing the host's VPN is a system setting for a human. The run was closed as blind. `run_suites.sh` gained a CLI-based reachability preflight that waits up to 10 min and then exits 4 with `NETWORK-DOWN`, the default-route interface and the curl result.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-29T23:08:00Z",
+        "kind": "note",
+        "label": "Last suite run green on this host (anchor 28, echopoint 39)",
+        "detail": "Recorded in the routine's run log."
+      },
+      {
+        "t": "2026-10-30T04:09:38Z",
+        "kind": "change",
+        "label": "VPN log starts: tunnel up, NetShield 2, split-tcp on",
+        "detail": "Earliest line of the rotated ProtonVPN log; the connect time itself is not in the log.",
+        "approx": true
+      },
+      {
+        "t": "2026-10-30T04:21:33Z",
+        "kind": "note",
+        "label": "CI gate runs the anchor suite green on 206b6eed",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/41002447291"
+      },
+      {
+        "t": "2026-10-30T05:08:17Z",
+        "kind": "trigger",
+        "label": "Both tags exit 3: flows/search times out",
+        "detail": "`Client.Timeout exceeded while awaiting headers`; no flow launched."
+      },
+      {
+        "t": "2026-10-30T05:09:56Z",
+        "kind": "detect",
+        "label": "Routine reads `exit 3 pass 0 fail 0` and the CLI log"
+      },
+      {
+        "t": "2026-10-30T05:10:48Z",
+        "kind": "note",
+        "label": "Rerun fails the same way: `TLS handshake timeout`"
+      },
+      {
+        "t": "2026-10-30T05:15:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "curl /health 200 in 40 ms; IPv6 path dead; gh fails",
+        "detail": "curl uses SecureTransport and falls back to IPv4. `gh` (Go) also gets `TLS handshake timeout` on api.github.com."
+      },
+      {
+        "t": "2026-10-30T05:32:08Z",
+        "kind": "note",
+        "label": "10-min recovery poll ends: CLI still down"
+      },
+      {
+        "t": "2026-10-30T05:40:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "OpenSSL, Python TLS 1.2/1.3 fail; 1400-byte DF ping passes",
+        "detail": "`openssl s_client` writes a 166-byte ClientHello and reads 0 bytes from 172.64.80.1, so packet size is not the cause."
+      },
+      {
+        "t": "2026-10-30T06:03:38Z",
+        "kind": "note",
+        "label": "15-min recovery poll ends: CLI still down"
+      },
+      {
+        "t": "2026-10-30T06:07:24Z",
+        "kind": "mitigate",
+        "label": "NETWORK-DOWN preflight added to run_suites.sh",
+        "approx": true
+      },
+      {
+        "t": "2026-10-30T06:20:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Run closed as blind; next run re-probes at 11:08Z",
+        "detail": "The CLI still timed out at 06:07Z. The next scheduled run stops with `NETWORK-DOWN` if the path is still broken."
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The 05:08Z scheduled suite run checked 0 of 68 flows; the routine had no suite result for that window",
+    "because": [
+      {
+        "text": "Both tags exited 3 before launching: the CLI's first request to the control plane never completed TLS",
+        "evidence": "`error: search flows by tag: Post \"https://api.echopoint.dev/flows/search\": net/http: TLS handshake timeout` in `anchor.log` and `echopoint.log` of the run",
+        "because": [
+          {
+            "text": "On this host, Go, Python and OpenSSL TLS handshakes got 0 bytes back from every tested HTTPS host; SecureTransport curl did not",
+            "evidence": "`openssl s_client -tls1_2` to 172.64.80.1: `read 0 bytes and written 166 bytes`; `curl -4` same IP: 200, TLS done in 36 ms; Python `ssl` TimeoutError for TLS 1.2 and 1.3",
+            "because": [
+              {
+                "text": "Packet size is not the cause: 1400-byte DF pings pass and a 166-byte ClientHello also gets no answer",
+                "evidence": "`ping -D -s 1372 172.64.80.1`: 0% loss; `GODEBUG=tlsmlkem=0` (smaller Go hello) still times out",
+                "because": [
+                  {
+                    "text": "The IPv4 default route is a VPN tunnel with NetShield and split-tcp on; which part drops non-Apple handshakes is unconfirmed",
+                    "evidence": "`netstat -rn`: default via utun7 (10.2.0.2, MTU 1420); ProtonVPN log: `netshield-level: 2`, `split-tcp: true`",
+                    "open": true
+                  }
+                ]
+              },
+              {
+                "text": "The suite's network path is whatever the laptop's owner configured for personal use that day",
+                "evidence": "The suites run on the CLI's embedded runner on the developer laptop (Run notes; 2026-10-17 host-sleep postmortem A3 still open)",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "Scheduled suites run on a personal laptop, so its VPN, Wi-Fi and sleep settings decide if a run can happen"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The run reported `exit 3 pass 0 fail 0` twice and took about an hour to name as a host network fault",
+        "because": [
+          {
+            "text": "`run_suites.sh` checked auth expiry and kept the host awake, but never proved the CLI could reach the API",
+            "evidence": "`run_suites.sh` before this change: preflight checks `expires_at` only; its transport rerun handles failed flows, not a launch that selected none",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "The suite script assumed the control plane was reachable and had no distinct outcome for a launch-time network failure"
+              }
+            ]
+          },
+          {
+            "text": "The first network check, curl `/health`, passed and pointed the diagnosis away from the network",
+            "evidence": "curl 8.7.1 (SecureTransport) to `api.echopoint.dev/health`: 200 in 40 ms while the CLI timed out",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "Reachability was probed with a different TLS stack than the client under test, and nothing said that probe can mislead"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "IPv6 was also black-holed on the host, and GitHub DNS failed for about 20 minutes, which hid the TLS pattern behind more general noise.",
+    "The VPN log rotates and starts at 04:09Z, so when the tunnel or its features changed after the last green run (23:08Z) is not on record."
+  ],
+  "lessons": {
+    "well": [
+      "The run did not report a red suite or file product bugs: `exit 3` with zero flows was read as a launch failure, not as test results.",
+      "Testing the handshake with four TLS clients and two packet sizes separated a host-path fault from an MTU or server fault in minutes."
+    ],
+    "wrong": [
+      "A curl health check stood in for the CLI's reachability; it passed while the CLI could not connect at all.",
+      "Two fixed-length recovery polls (10 and 15 min) spent the run's time without new information."
+    ],
+    "lucky": [
+      "The CI post-deploy gate had run the anchor suite green on the same commits 47 min earlier, so no merged change went untested.",
+      "anchor#284 and #287 had already been covered by another session; a merge that needed new flows would have gone uncovered this run.",
+      "git (SecureTransport) and the REST API through curl still reached GitHub, so the fix and this report could still ship while `gh` could not."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Decide the suite host: an always-on machine on a plain network, or Cloud launches for the scheduled runs (same decision as the 2026-10-17 A3)",
+      "type": "prevent",
+      "owner": "Nanostack maintainers",
+      "due": "2026-11-13",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "Until A1: exclude `*.echopoint.dev` and `*.tryanchor.dev` from the VPN tunnel on the suite host, or confirm which VPN feature drops the handshakes",
+      "type": "mitigate",
+      "owner": "Laptop owner",
+      "due": "2026-11-06",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "`run_suites.sh` probes the control plane with the CLI itself, waits up to 10 min, then exits 4 with `NETWORK-DOWN`, the route interface and the curl result",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "flow-suite-testing: probe reachability with the client that runs the suite, since another TLS stack can pass where it fails",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and write-up",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Scheduled flow suites (05:08Z) checked 0 flows: on the suite laptop the VPN path drops Go/OpenSSL TLS handshakes; curl still works. No product signal lost (CI gate green at 04:21Z). run_suites.sh now stops with NETWORK-DOWN. Needed: decide the suite host, or exclude the API hosts from the VPN.",
+    "external": "None: dev and CI tooling only."
+  },
+  "links": [
+    {
+      "label": "Postmortem report",
+      "url": "https://claude.ai/artifact/WvHsuSKxdJ7Lqt4szExThR"
+    },
+    {
+      "label": "Suite run host sleep (same host, 2026-10-17)",
+      "url": "https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-17-suite-run-host-sleep.md"
+    },
+    {
+      "label": "Suite transport reset (2026-10-21)",
+      "url": "https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-21-suite-transport-reset.md"
+    },
+    {
+      "label": "CI anchor gate green at 04:21Z",
+      "url": "https://github.com/nanostack-dev/infra/actions/runs/41002447291"
+    }
+  ]
+}
