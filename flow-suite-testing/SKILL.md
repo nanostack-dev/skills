@@ -85,6 +85,11 @@ authorization requirements.
    each one that did not complete still owns: the rerun creates its own data, so its
    green result says nothing about the first run's leftovers
    ([leaked cleanup](../docs/postmortems/2026-10-23-suite-transport-reset-leaked-cleanup.md)).
+   A flow that fails on some deploys of unchanged code and passes on others carries
+   state drawn per process: a restart re-rolls it, so each replica can run a different
+   order. Treat a pass after such failures as a coin flip and read the server's
+   errors for every failed deploy
+   ([observer order](https://github.com/nanostack-dev/anchor/blob/main/docs/postmortems/2026-10-31-tx-observer-order-deadlock.md)).
    Repair the demonstrated cause and rerun the affected selection without weakening
    its assertions or hiding the failing case.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
