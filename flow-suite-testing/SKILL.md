@@ -133,6 +133,11 @@ alone does not establish concurrency.
 - Send each create operation's **minimum contract body** once: only the schema's
   required properties. Fixtures that fill every optional field hide a server
   that requires one the contract marks optional.
+- Test a search filter on a fixture you own that holds a **near-miss** value (a
+  name containing the searched name), so exact and substring filters answer
+  differently. A lookup by name in a shared catalog breaks when another
+  pipeline adds a lookalike: narrow it by every discriminator the search offers
+  ([role names](https://github.com/nanostack-dev/anchor/pull/316)).
 - Check baseline totals or empty lists **before every write in their scope**.
   Adding an unrelated writer later can invalidate that ordering. Post-write totals
   depend on all relevant writes; isolate the scope or assert a verified delta.
