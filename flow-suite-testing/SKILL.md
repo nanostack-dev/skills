@@ -138,6 +138,9 @@ alone does not establish concurrency.
   differently. A lookup by name in a shared catalog breaks when another
   pipeline adds a lookalike: narrow it by every discriminator the search offers
   ([role names](https://github.com/nanostack-dev/anchor/pull/316)).
+- Repeat each delete or remove the contract calls **idempotent** and assert its
+  documented status on the repeat. A strict upstream behind the API can answer
+  `404` there ([workspace role remove](https://github.com/nanostack-dev/echopoint/blob/main/docs/postmortems/2026-11-01-workspace-role-remove-404.md)).
 - Check baseline totals or empty lists **before every write in their scope**.
   Adding an unrelated writer later can invalidate that ordering. Post-write totals
   depend on all relevant writes; isolate the scope or assert a verified delta.
