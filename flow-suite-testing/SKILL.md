@@ -81,6 +81,11 @@ authorization requirements.
    a probe on another TLS stack (system curl) can pass while the client's handshakes
    go unanswered, and a launch that selects no flows is a blind run, not a result
    ([TLS blackhole](../docs/postmortems/2026-10-30-suite-host-network-tls.md)).
+   Launch each tag in the workspace that holds its flows, named per tag in every
+   caller (script, gate, schedule): an omitted workspace resolves to a server default
+   that moves when someone adds or reorganizes workspaces, and a tag matching no flows
+   means its flows moved
+   ([workspace split](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-02-ci-workspace-split.md)).
    Before the rerun, read the interrupted execution's cleanup nodes and delete what
    each one that did not complete still owns: the rerun creates its own data, so its
    green result says nothing about the first run's leftovers
