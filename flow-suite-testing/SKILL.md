@@ -132,6 +132,11 @@ when several nodes need the same identity. Re-evaluating a generator in a child
 flow or another node may produce a different value. Bind parent outputs explicitly
 when the engine supports modules or subflows.
 
+Test email addresses go to a mailbox the project owns, because invitation and
+email flows deliver for real. At Nanostack every address is
+`garbage+<tag>@nanostack.dev`, with a per-run tag such as `{{$runId}}`. Do not
+use fake-data email generators, `example.com`, `.test` or `.invalid` domains.
+
 Credentials belong in supported secret storage or secure launch inputs. Verify
 storage, access and redaction behavior rather than assuming every engine encrypts
 values or masks results. Inspect request URLs, headers, bodies, progress events,
