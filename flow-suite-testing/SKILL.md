@@ -102,6 +102,10 @@ authorization requirements.
    runs to exercise ordering variation. Repeated passes sample races; they do not
    prove their absence. Serial runs also keep the same replica placement, so run
    a new flow twice inside the full concurrent selection before a gate selects it.
+   Count the selection first: a runner that caps how many flows one selection may
+   launch (the Echopoint CLI refuses a tag above 50) stops the whole gate at the
+   cap, so split the selection before it fills
+   ([gate tag flow cap](../docs/postmortems/2026-11-04-gate-tag-flow-cap.md)).
 8. **Connect the gate.** Register the flow through the project's supported suite
    selection and synchronize authorized copies where needed. Verify that current
    CI actually selects the changed definitions.

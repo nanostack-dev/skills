@@ -1,0 +1,192 @@
+{
+  "title": "Near miss: the echopoint gate tag grew past the CLI's 50-flow cap for 40 seconds",
+  "short": "Gate tag flow cap",
+  "service": "echopoint flow suites (post-deploy gate tag `echopoint`), echopoint CLI",
+  "date": "2026-11-04",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The routine tagged four security flows `echopoint` after echopoint#733 fixed their findings, taking the tag from 47 to 51 flows. `echopoint flows run --tag` refuses a tag that matches more than 50 flows (`maxTagResolvedFlows = 50`, no flag), and the post-deploy gate and Daily runs use the same CLI. The routine's own soak run exited 3 at once; the tags were reverted 40 seconds later. No gate ran in that window. The tag has three free slots left, so the next few new flows will hit the cap for real.",
+  "impact": {
+    "text": "None this time: no deploy gate ran between 00:25:37Z and 00:26:17Z. Had one run, the echopoint gate would have exited 3 and held prod promotion until the tag shrank.",
+    "numbers": [
+      {
+        "value": "51 / 50",
+        "label": "flows in the tag vs the CLI cap"
+      },
+      {
+        "value": "40 s",
+        "label": "time the tag was over the cap"
+      },
+      {
+        "value": "3",
+        "label": "free slots left in the echopoint tag"
+      }
+    ]
+  },
+  "trigger": "Four `flows update` calls at 00:25:37Z added the `echopoint` tag to the F-1, F-3, F-4 and F-5 security flows.",
+  "detection": "The routine's two-run concurrent soak, a step added the same night, printed `tag search matched 51 flows, exceeding the CLI safety cap of 50` and exit 3 within seconds.",
+  "resolution": "The four flows went back to `sec-audit, security-guardrail` at 00:26:17Z: the Daily echopoint monitor (server-side, no cap found) still runs them, the gate does not. They passed twice on dev.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-04T00:25:37Z",
+        "kind": "trigger",
+        "label": "Four security flows tagged echopoint (47 \u2192 51)"
+      },
+      {
+        "t": "2026-11-04T00:25:42Z",
+        "kind": "detect",
+        "label": "Soak run: tag matched 51 flows, cap 50, exit 3"
+      },
+      {
+        "t": "2026-11-04T00:26:17Z",
+        "kind": "mitigate",
+        "label": "Tags reverted to sec-audit, security-guardrail"
+      },
+      {
+        "t": "2026-11-04T00:26:17Z",
+        "kind": "resolve",
+        "label": "echopoint tag back to 47; no gate ran meanwhile"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "For 40 seconds the next echopoint deploy gate would have refused to start, holding prod promotion",
+    "because": [
+      {
+        "text": "The gate selects one tag through a CLI that refuses more than 50 matched flows, with no override",
+        "evidence": "echopoint-cli `internal/commands/flow_run.go`: `const maxTagResolvedFlows = 50`; `flows run --help` lists no cap flag",
+        "because": [
+          {
+            "text": "The cap guards accidental mass launches; the gate's tag was never sized against it",
+            "because": [
+              {
+                "id": "R1",
+                "root": true,
+                "text": "One tag carries a whole product's gate while the CLI caps a tag run at 50 flows"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "Nothing warned as the tag grew from 22 to 47 flows in three weeks",
+        "evidence": "Run notes tag sizes: 22 on 2026-10-16, 44 on 2026-11-02, 47 on 2026-11-03",
+        "because": [
+          {
+            "text": "The routine tracks tag sizes in its notes as counts, with no limit beside them",
+            "evidence": "Run notes 'Tag sizes' line lists counts only",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "Tag size is not checked against the cap before a flow joins a gate"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Had a gate run, it would have held every echopoint change until someone removed a tag",
+        "because": [
+          {
+            "text": "The gate's failure path only alerts a Discord channel; promotion waits for the next deploy",
+            "evidence": "infra `router.yml` `alert-deploy-failure`",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "A gate that cannot start fails like a red gate, and a red gate has no owner (companion SEV4 of 2026-11-03)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The routine's new soak step ran the tag before any gate could, which is why this stayed a near miss."
+  ],
+  "lessons": {
+    "well": [
+      "The CLI fails closed with an exact message instead of running a truncated suite.",
+      "The soak step from the same night's postmortem caught it within seconds."
+    ],
+    "wrong": [
+      "The routine knew the tag size (47) and did not compare it with the cap before tagging four flows."
+    ],
+    "lucky": [
+      "No deploy ran in the 40 seconds; one merge at that time would have held echopoint prod promotion."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Revert the four tags; flows run through the Daily monitor's sec-audit tag",
+      "type": "mitigate",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "Split the echopoint gate into two tags, or let the CLI page past 50 with an explicit flag",
+      "type": "prevent",
+      "owner": "infra + echopoint-cli maintainers",
+      "due": "2026-11-10",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "run_suites.sh prints TAG-NEAR-CAP when a tag holds 45+ flows; skill line to check the count before tagging",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Owner for a red or unstartable gate (A5 of the gate-flows postmortem)",
+      "type": "process",
+      "owner": "infra maintainers",
+      "due": "2026-11-17",
+      "status": "open",
+      "fixes": [
+        "R3"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "The echopoint gate tag holds 47 flows and the CLI refuses tag runs above 50. Split the gate tag or add a paging flag before more flows land.",
+    "external": "None: no impact."
+  },
+  "links": [
+    {
+      "label": "Report (artifact)",
+      "url": "https://claude.ai/artifact/T8Tt8vTgZPPzQdeDrkUs7J"
+    },
+    {
+      "label": "SEV4 gate flows pinned old behaviour",
+      "url": "https://claude.ai/artifact/Xxmi3NC6ppsTvwJDKYczLZ"
+    }
+  ]
+}
