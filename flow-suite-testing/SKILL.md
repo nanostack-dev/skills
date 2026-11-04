@@ -72,7 +72,8 @@ authorization requirements.
    A runner on a host that can sleep or drop its network (a laptop, a runner embedded
    in a CLI) produces host causes, not product ones: a lease-expired or job-token
    rejection, and a transport failure before any response (connection reset or
-   refused, TLS, DNS), which fails the node because the runner replays nothing. Keep
+   refused, TLS, DNS; inside a loop the message carries an iteration prefix, so match
+   it anywhere in the error), which fails the node because the runner replays nothing. Keep
    the host awake for the whole run, read its sleep log for the run window, and rerun
    only the interrupted flows, once; a repeat on the rerun is an outage to diagnose
    ([sleep](../docs/postmortems/2026-10-17-suite-run-host-sleep.md),
@@ -103,8 +104,9 @@ authorization requirements.
    prove their absence. Serial runs also keep the same replica placement, so run
    a new flow twice inside the full concurrent selection before a gate selects it.
    Count the selection first: a runner that caps how many flows one selection may
-   launch (the Echopoint CLI refuses a tag above 50) stops the whole gate at the
-   cap, so split the selection before it fills
+   launch (the Echopoint CLI refuses a tag above `--max-flows`, default 50) stops
+   the whole gate at the cap: set the cap explicitly in every caller (script,
+   gate) and split the selection before it fills
    ([gate tag flow cap](../docs/postmortems/2026-11-04-gate-tag-flow-cap.md)).
 8. **Connect the gate.** Register the flow through the project's supported suite
    selection and synchronize authorized copies where needed. Verify that current
