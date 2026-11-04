@@ -100,7 +100,8 @@ authorization requirements.
 7. **Repeat.** Run consecutively to expose collisions and stale fixtures, and verify
    cleanup independently. For a new or reshaped concurrent graph, use additional
    runs to exercise ordering variation. Repeated passes sample races; they do not
-   prove their absence.
+   prove their absence. Serial runs also keep the same replica placement, so run
+   a new flow twice inside the full concurrent selection before a gate selects it.
 8. **Connect the gate.** Register the flow through the project's supported suite
    selection and synchronize authorized copies where needed. Verify that current
    CI actually selects the changed definitions.
@@ -136,8 +137,10 @@ alone does not establish concurrency.
 - Make all other input valid in a negative case, so its assertion identifies one
   cause. A duplicate case must reach the duplicate rule, not fail body validation.
 - Send each create operation's **minimum contract body** once: only the schema's
-  required properties. Fixtures that fill every optional field hide a server
-  that requires one the contract marks optional.
+  required properties, and assert every field the server defaults against the
+  contract's values. Fixtures that fill every optional field hide a server that
+  requires one the contract marks optional, or defaults it to a value outside
+  the enum ([status enum](https://github.com/nanostack-dev/anchor/blob/main/docs/postmortems/2026-11-04-product-user-status-enum.md)).
 - Test a search filter on a fixture you own that holds a **near-miss** value (a
   name containing the searched name), so exact and substring filters answer
   differently. A lookup by name in a shared catalog breaks when another
@@ -226,6 +229,11 @@ during setup. Fan in from every triggering branch to a final bounded observation
 before cleanup. Use a verified always/finally path where supported so one failed
 branch does not conceal unrelated event outcomes.
 
+- A read served through a **per-replica cache** in front of another service lags
+  a write that bypasses that service (a license patched on the provider, read
+  through a client cache with a 30 s TTL). Make the poll the final check: one
+  fresh replica does not make the next read fresh
+  ([license cache](../docs/postmortems/2026-11-03-license-cache-gate-flake.md)).
 - Correlate each expectation with this run's resource and action, not event type
   alone. Check important payload fields and relevant authentication metadata.
 - Write counts that hold under any claim order. Express N occurrences of one event
@@ -253,7 +261,12 @@ all selected definitions and authorized tenant/environment copies. Update the
 assertion and any display name that embeds the expected outcome in the same
 change. Re-execute the affected suites on each required target and verify CI
 coverage. The API contract determines the correct status; this skill keeps its
-consumers aligned.
+consumers aligned. Do this before the change merges: a post-deploy gate that
+still asserts the old outcome holds every later change of that product off prod
+([gate flows pinned old behaviour](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-03-gate-flows-pinned-old-behaviour.md)).
+When a check turns out to contradict the contract, search every flow for other
+checks that assert the same behaviour and move them to the known-failure policy
+with it; a check that pins a contract bug as correct later blocks its fix.
 
 When a request contract tightens (a new required header, parameter or field),
 migrate every request the suite sends: the modules and subflows a tagged run

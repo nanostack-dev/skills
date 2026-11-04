@@ -1,0 +1,234 @@
+{
+  "title": "A new gate flow read a per-replica license cache right after an Anchor write and failed by replica luck",
+  "short": "License cache gate flake",
+  "service": "echopoint flow suite (`echopoint: invitation email budget`), Anchor SDK license cache",
+  "date": "2026-11-03",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "`echopoint: invitation email budget` was added to the `echopoint` gate tag at about 18:00Z after three green runs and one green suite run. At 19:41:34Z, in the post-deploy gate for echopoint#733, its node `usage-lowered` read `limit 20` 79 ms after the flow PATCHed the license to 5 on Anchor. Echopoint reads licenses through the Anchor SDK cache (30 s TTL per replica) and the PATCH bypasses Echopoint, so a replica that served the previous read answers stale data. The earlier green runs passed because the two reads landed on different replicas. The flow now polls the limit through a module and makes that poll its final check; it ran green three times.",
+  "impact": {
+    "text": "Dev and CI only. The flake was one of the two checks that failed the echopoint gate for echopoint#733, so it would have held prod promotion on its own.",
+    "numbers": [
+      {
+        "value": "79 ms",
+        "label": "between the PATCH and the stale read"
+      },
+      {
+        "value": "30 s",
+        "label": "Anchor SDK license cache TTL per replica"
+      },
+      {
+        "value": "2",
+        "label": "dev Echopoint replicas, each with its own cache"
+      }
+    ]
+  },
+  "trigger": "Gate run 41705330775: `usage-beta` (19:41:33.914Z) and `usage-lowered` (19:41:34.135Z) both landed on `echopoint-dev_echopoint.1`, around the Anchor PATCH at 19:41:34.056Z (VictoriaLogs).",
+  "detection": "The echopoint-investigation routine read the red gate at 00:08Z. The gate's Discord alert at 19:42Z had no owner (see the companion SEV4 on gate flows that pinned old behaviour). Detection was adequate for a flake: the gate failed closed. The missing piece is an owner for red gates, covered by the companion postmortem's action.",
+  "resolution": "New module `license: invitation limit poll (module)` polls `GET /license/usage` until the limit equals the expected value (2 s interval, 60 s timeout); the flow ends on that poll. A first version that polled and then read once more failed 3 of 3 runs: the poll was answered by the fresh replica and the next read by the stale one.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-03T18:00:00Z",
+        "approx": true,
+        "kind": "change",
+        "label": "Flow tagged `echopoint` after 3 green runs"
+      },
+      {
+        "t": "2026-11-03T19:41:34Z",
+        "kind": "trigger",
+        "label": "Gate: usage-lowered limit 20, expected 5",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/41705330775"
+      },
+      {
+        "t": "2026-11-03T19:42:02Z",
+        "kind": "note",
+        "label": "Deploy-failure alert to Discord, no owner"
+      },
+      {
+        "t": "2026-11-04T00:08:00Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "Routine reads the red gate"
+      },
+      {
+        "t": "2026-11-04T00:11:12Z",
+        "kind": "note",
+        "label": "Inline poll fails: a poll body cannot read node outputs"
+      },
+      {
+        "t": "2026-11-04T00:17:02Z",
+        "kind": "note",
+        "label": "Poll then read: 3/3 red, proves per-replica caches"
+      },
+      {
+        "t": "2026-11-04T00:18:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Poll becomes the final check"
+      },
+      {
+        "t": "2026-11-04T00:19:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Flow green 3 times"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The echopoint post-deploy gate failed on a new flow, which alone would have held prod promotion",
+    "because": [
+      {
+        "text": "`usage-lowered` read limit 20 from a replica that had cached the license 220 ms earlier",
+        "evidence": "VictoriaLogs: both GETs on `echopoint.1`; PATCH on Anchor between them",
+        "because": [
+          {
+            "text": "Echopoint reads licenses through the Anchor SDK cache, 30 s per replica, and the flow wrote the license on Anchor directly",
+            "evidence": "`anchorsdk/license.go` `defaultLicenseCacheTTL = 30 * time.Second`; `licenses/resolver.go` reads via the SDK",
+            "because": [
+              {
+                "id": "R1",
+                "root": true,
+                "text": "The flow guide covers projections that lag a write, not read caches in front of another service"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "Four earlier green runs hid the race: the two reads usually landed on different replicas",
+        "evidence": "A version with one extra request in between failed 3/3 at 00:17Z (parity shifted)",
+        "because": [
+          {
+            "text": "The routine's acceptance rule is three serial green runs, written for count races in one process",
+            "evidence": "Run notes: 'run any new or reshaped flow 3x before trusting it' (2026-10-05 count race)",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "Repeated serial runs do not vary replica placement, so they cannot prove a check free of per-replica state"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "A flow three runs old sat in a gate that holds the whole product's promotion",
+        "because": [
+          {
+            "text": "The routine tags a flow into the gate as soon as it passes alone; the gate runs it beside 46 others",
+            "evidence": "Run notes coverage entry: green 3x + in the suite, tagged the same run",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "New flows join the gate tag with no soak period in the concurrent suite"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The same gate also failed on a flow that pinned behaviour echopoint#733 changed on purpose, so the promotion was held either way."
+  ],
+  "lessons": {
+    "well": [
+      "VictoriaLogs task names showed the replica of each request, which made the cause provable in one query."
+    ],
+    "wrong": [
+      "The first fix (poll, then read) passed review in my head and failed every run."
+    ],
+    "lucky": [
+      "The flake fired in the same gate as a real failure, so it held nothing extra; next time it can hold a clean deploy."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Poll the limit in a module and end the flow on that poll",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R2"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "flow-suite-testing skill: a read behind a per-replica cache after a write that bypasses it is polled, and the poll is the final check",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R2"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "New flows run in the full concurrent tag twice before they are tagged into a gate",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Invalidate the Echopoint license cache on Anchor `organization.license.updated`, if Echopoint receives that event",
+      "type": "mitigate",
+      "owner": "echopoint maintainers",
+      "due": "2026-11-30",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "Routine reads every Deploy Router gate result each run and runs a red flow through this loop",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "The invitation email budget flow failed the echopoint gate on a 30 s license cache; it now polls. No product bug.",
+    "external": "None: dev and CI only."
+  },
+  "links": [
+    {
+      "label": "Report (artifact)",
+      "url": "https://claude.ai/artifact/93ezZXvL7E99pDf7T81vg4"
+    },
+    {
+      "label": "Echopoint gate run",
+      "url": "https://github.com/nanostack-dev/infra/actions/runs/41705330775"
+    },
+    {
+      "label": "SEV4 gate flows pinned old behaviour",
+      "url": "https://claude.ai/artifact/Xxmi3NC6ppsTvwJDKYczLZ"
+    }
+  ]
+}
