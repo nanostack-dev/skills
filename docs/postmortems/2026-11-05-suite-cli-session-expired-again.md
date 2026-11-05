@@ -118,6 +118,7 @@ flowchart TD
 
 - The Run notes held the expiry as open item 41 marked URGENT, but the Run notes are read only by the next run, not by the human who must act.
 - Post-deploy gates and the Daily monitor stayed green on separate credentials, so nothing else looked wrong.
+- The push sent for this postmortem reached the desktop only (`Mobile push not sent (Remote Control inactive)`): A2 depends on a channel that is not always on, so R3 stays at risk while the owner is away from the laptop.
 
 ## Lessons learned
 
