@@ -248,12 +248,20 @@
   },
   "links": [
     {
+      "label": "Atelier postmortem",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1acea-63a5-7a86-9c2b-69a2becb0e79"
+    },
+    {
       "label": "First postmortem (2026-10-26)",
       "url": "https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-26-suite-cli-session-expired.md"
     },
     {
       "label": "echopoint-cli#81 (stored key after expiry, merged)",
       "url": "https://github.com/nanostack-dev/echopoint-cli/pull/81"
+    },
+    {
+      "label": "skills#52",
+      "url": "https://github.com/nanostack-dev/skills/pull/52"
     }
   ]
 }

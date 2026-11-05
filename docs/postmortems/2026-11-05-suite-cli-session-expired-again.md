@@ -161,5 +161,7 @@ None: dev-only test infrastructure.
 
 ## Supporting information
 
+- [Atelier postmortem](http://nanostack-dev-1340p:4320/postmortems/01a1acea-63a5-7a86-9c2b-69a2becb0e79)
 - [First postmortem (2026-10-26)](https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-26-suite-cli-session-expired.md)
 - [echopoint-cli#81 (stored key after expiry, merged)](https://github.com/nanostack-dev/echopoint-cli/pull/81)
+- [skills#52](https://github.com/nanostack-dev/skills/pull/52)
