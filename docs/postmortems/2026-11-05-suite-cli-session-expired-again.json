@@ -1,0 +1,259 @@
+{
+  "title": "Suite run blind again: the routine's prod CLI session expired after 8 unread warnings",
+  "short": "Suite session expired again",
+  "service": "echopoint-investigation routine (prod-org flow suites on dev)",
+  "date": "2026-11-05",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The 18:08Z run of the scheduled flow-suite routine checked no flow: `run_suites.sh` stopped with `AUTH-EXPIRED`. The `prod` CLI profile still held only a 7-day browser session (signed in about 2026-10-29T17:09Z), which expired at 2026-11-05T17:09:37Z. This is a regression of the [2026-10-26 postmortem](2026-10-26-suite-cli-session-expired.md): its preflight worked and warned in 8 runs, and the CLI fallback (echopoint-cli#81) merged on 2026-11-02, but the one action that removes the trigger, storing a CI-org API key, had no date or owner who saw it, and the warnings only reached run reports. The ledger row was marked verified on two clean runs while that action was still open. Gates passed on the two backend merges of the window (echopoint 53/53, anchor 32/32), so no change went unchecked.",
+  "impact": {
+    "text": "One routine run (of four a day) checked 0 of 85 flows, and every later run stays blind until a human signs in or stores a key. New coverage for echopoint#746 and #747 waits. Customers saw nothing: the flows only target dev, and gates and the Daily monitor use separate credentials.",
+    "numbers": [
+      {
+        "value": "0 / 85",
+        "label": "flows checked at 18:08Z"
+      },
+      {
+        "value": "8",
+        "label": "runs that warned AUTH-EXPIRES-SOON"
+      },
+      {
+        "value": "2nd",
+        "label": "expiry in 10 days"
+      }
+    ]
+  },
+  "trigger": "The `prod` profile's session JWT reached its `exp` at 2026-11-05T17:09:37Z.",
+  "detection": "The 18:08Z run's preflight stopped with `AUTH-EXPIRED` before any launch, as designed. The expiry itself was predicted: `AUTH-EXPIRES-SOON` appeared in 8 run logs from 2026-11-03T18:08Z and in the Run notes as an urgent open item, but no notification reached a human.",
+  "resolution": "Not resolved by the routine: re-authentication needs a person, and the routine never enters credentials. The routine now pushes a notification for every `AUTH-EXPIRES-SOON` or `AUTH-EXPIRED` line, and a ledger row whose trigger depends on an open human action can no longer be marked verified.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-26T23:08:47Z",
+        "kind": "change",
+        "label": "First expiry; preflight + CLI fallback actions created",
+        "detail": "[2026-10-26 postmortem](2026-10-26-suite-cli-session-expired.md): A1 store a CI-org API key (human), A2 echopoint-cli#81, A3 preflight (done)."
+      },
+      {
+        "t": "2026-10-29T17:09:37Z",
+        "approx": true,
+        "kind": "change",
+        "label": "A human signs in again: new 7-day browser session",
+        "detail": "`exp` minus 7 days; Run log 2026-10-29T23:08Z. No API key stored."
+      },
+      {
+        "t": "2026-10-30T17:08:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Ledger row moved to verified after two clean runs",
+        "detail": "Ledger row `flows:prod:suite-runner:stored credentials have expired`; A1 still open."
+      },
+      {
+        "t": "2026-11-02T20:35:55Z",
+        "kind": "change",
+        "label": "echopoint-cli#81 merged (stored key survives expiry)",
+        "link": "https://github.com/nanostack-dev/echopoint-cli/pull/81"
+      },
+      {
+        "t": "2026-11-03T18:08:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "First AUTH-EXPIRES-SOON warning (report line only)",
+        "detail": "`runs/2026-11-03T1808/suite.log`; repeated in 7 more runs up to `runs/2026-11-05T1208/run.log`."
+      },
+      {
+        "t": "2026-11-05T17:09:37Z",
+        "kind": "trigger",
+        "label": "Session JWT expires",
+        "detail": "`~/.echopoint/credentials/prod.json` keys `access_token`, `expires_at`, `organization_id`: no API key stored."
+      },
+      {
+        "t": "2026-11-05T17:34:34Z",
+        "kind": "note",
+        "label": "Gate green on echopoint#746/#747 (53/53)",
+        "detail": "infra job 127415412871; anchor gate 32/32 at 17:46Z (job 127422027821). Gates use the CI key, not the host session."
+      },
+      {
+        "t": "2026-11-05T18:08:25Z",
+        "kind": "detect",
+        "label": "run_suites.sh stops: AUTH-EXPIRED (exit 2)",
+        "detail": "`runs/2026-11-05T1808/run.log`."
+      },
+      {
+        "t": "2026-11-05T18:40:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Warnings now pushed; verified rule tightened",
+        "detail": "Routine SKILL.md and `postmortem-loop.md` updated; flow-suite-testing skill line sharpened."
+      },
+      {
+        "t": "2026-11-05T18:45:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Impact bounded: human sign-in or API key requested by push",
+        "detail": "Suites stay blind until action A1."
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The 18:08Z routine run checked no flow, so a dev regression merged now goes unseen until a human acts",
+    "because": [
+      {
+        "text": "The prod CLI profile's browser session expired at 17:09Z and the preflight stopped the run",
+        "evidence": "`runs/2026-11-05T1808/run.log`: `AUTH-EXPIRED prod session expired at 2026-11-05T12:09:37-05:00`",
+        "because": [
+          {
+            "text": "The host still held only a 7-day browser session; the 2026-10-26 action A1 (store a CI-org API key) never happened",
+            "evidence": "`prod.json` keys `access_token,expires_at,organization_id`; 2026-10-26 postmortem A1 `open`",
+            "because": [
+              {
+                "text": "The first fix renewed the session, which cleared the symptom for exactly 7 days, and the row was then marked verified",
+                "evidence": "Ledger row status `verified (2026-10-30T17:08Z)` while A1 was open",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "The loop marks a row verified after two clean runs even when the trigger returns on a known date unless an open human action is done"
+                  }
+                ]
+              },
+              {
+                "text": "A1 had a due date in a committed document but no channel that reminds its owner",
+                "because": [
+                  {
+                    "id": "R2",
+                    "root": true,
+                    "text": "Human actions from postmortems live only in docs and Run notes; nothing pushes them when their deadline nears"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The expiry was predicted 48 h ahead in 8 runs, yet no human acted before it",
+        "evidence": "`AUTH-EXPIRES-SOON` in `runs/2026-11-03T1808` … `runs/2026-11-05T1208`",
+        "because": [
+          {
+            "text": "The warning went only to the run log, the Run notes and the run's final report",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The routine pushes a notification per postmortem only, so a dated warning that needs a human never reaches one"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Recovery waits for a person: the routine cannot sign in and must not handle credentials",
+        "because": [
+          {
+            "text": "Browser sign-in is the only credential on the host, and it needs a person at a browser",
+            "because": [
+              {
+                "text": "Creating an org API key is an org-admin action outside the routine's scope",
+                "because": [
+                  {
+                    "id": "R4",
+                    "root": true,
+                    "text": "The routine host has no non-expiring credential, though echopoint-cli#81 now makes a stored API key work after a session expires"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The Run notes held the expiry as open item 41 marked URGENT, but the Run notes are read only by the next run, not by the human who must act.",
+    "Post-deploy gates and the Daily monitor stayed green on separate credentials, so nothing else looked wrong."
+  ],
+  "lessons": {
+    "well": [
+      "The preflight caught the expiry before any launch: no half-run flows, no leaked cleanup.",
+      "Gates covered the window: both backend merges (echopoint#746, #747) passed 53/53 on dev before prod."
+    ],
+    "wrong": [
+      "A predicted, dated failure happened anyway after 8 warnings.",
+      "The first postmortem's verified status hid that its prevent action was still open."
+    ],
+    "lucky": [
+      "The two backend merges of the window were small security fixes that the CI gates covered.",
+      "The expiry hit between runs, not during one."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Create a CI-org API key for the routine and store it: `echopoint auth login --profile prod --api-key <key> --default` (echopoint-cli#81 makes it survive the session); sign in again meanwhile",
+      "type": "prevent",
+      "owner": "Workspace owner (human)",
+      "due": "2026-11-06",
+      "status": "open",
+      "fixes": [
+        "R4"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "Routine pushes a notification for every `AUTH-EXPIRES-SOON` or `AUTH-EXPIRED` preflight line, and for any dated human action due within 48 h",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R2",
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "`postmortem-loop.md` §5: a row whose trigger returns unless an open human action is done stays `fix-live`, never `verified`",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "flow-suite-testing skill: a renewed browser session is a mitigation, not a fix; the run stays at risk until an API key is stored",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and write-up",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Flow suites are blind since 17:09Z: the routine's prod CLI session expired again. Please store a CI-org API key with `echopoint auth login --profile prod --api-key <key> --default` (or sign in again). Gates and Daily are unaffected.",
+    "external": "None: dev-only test infrastructure."
+  },
+  "links": [
+    {
+      "label": "First postmortem (2026-10-26)",
+      "url": "https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-10-26-suite-cli-session-expired.md"
+    },
+    {
+      "label": "echopoint-cli#81 (stored key after expiry, merged)",
+      "url": "https://github.com/nanostack-dev/echopoint-cli/pull/81"
+    }
+  ]
+}

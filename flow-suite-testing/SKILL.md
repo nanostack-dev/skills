@@ -34,6 +34,9 @@ schemas and supported management interfaces. Identify:
   run signs in with an organization API key and checks it before launching; a
   person's browser session expires between runs and leaves the suite blind until
   someone signs in again ([expired session](../docs/postmortems/2026-10-26-suite-cli-session-expired.md)).
+  A renewed session only moves the expiry 7 days out: the run stays at risk until an
+  API key is stored, and an expiry warning goes to a human by push, not only into the
+  run report ([expired again](../docs/postmortems/2026-11-05-suite-cli-session-expired-again.md)).
 
 Engines differ in syntax and execution semantics. Use only capabilities verified
 in the current tool's help, schema, documentation or source. When binding an
