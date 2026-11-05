@@ -1,0 +1,298 @@
+{
+  "title": "The Daily echopoint monitor ran two security flows from stale published versions",
+  "short": "Stale published flows",
+  "service": "echopoint flow suites (prod CI org, monitor `Daily echopoint`), echopoint flow versions",
+  "date": "2026-11-05",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "At 09:00Z the `Daily echopoint` monitor failed two flows: `security — auth forgery & scheme boundaries` expected `BAD_REQUEST` and `security — ephemeral direct completion contract` expected `200`. Both had been updated to the echopoint#733 contract on 2026-11-04, and the gate and suite runs passed on them. A monitor runs a flow's latest **published** version, while `flows run` (suites and gate) runs the draft; these flows had versions published on 2026-10-17/20, and the 2026-11-04 updates were never published. Four flows had this drift. The routine published all four at 12:13Z and added a drift check to the suite script. Dev and CI only: the monitor calls the dev APIs and no deploy was held.",
+  "impact": {
+    "text": "Two red flows in the Daily monitor run on dev, a failure email to the monitor owner, and a monitor that tested a contract echopoint replaced on 2026-11-03. No prod deploy was held: the gate runs the drafts.",
+    "numbers": [
+      {
+        "value": "2 / 47",
+        "label": "Daily monitor flows failed at 09:00Z"
+      },
+      {
+        "value": "4",
+        "label": "flows whose draft differed from the published version"
+      },
+      {
+        "value": "3 h 11 min",
+        "label": "from the failed run to the fix"
+      }
+    ]
+  },
+  "trigger": "The `Daily echopoint` monitor ran at 2026-11-05T09:00:04Z, the first run since 2026-11-01, and launched the latest published version of each selected flow.",
+  "detection": "The routine read the monitor's scheduled executions at about 12:11Z while it checked that echopoint#742 had unblocked the Daily monitor. The monitor also emailed its owner on failure; nothing reads that email automatically.",
+  "resolution": "`flows publish` on the four drifted flows at 12:13:10Z. A rescan at 12:14:41Z found no flow whose draft differs from its latest published version. The drafts are green in the suites and the gate, so the next Daily run uses green definitions.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-10-17T04:17:18Z",
+        "kind": "change",
+        "label": "Security tracker flows get published versions",
+        "detail": "The echopoint pentest session published versions of F-1, F-3, F-5 and auth forgery flows (`flows version list`).",
+        "link": "https://github.com/nanostack-dev/echopoint/pull/652"
+      },
+      {
+        "t": "2026-10-20T01:59:36Z",
+        "kind": "change",
+        "label": "Auth forgery flow published with BAD_REQUEST",
+        "detail": "Last published version of `f2f5ed74` asserts `BAD_REQUEST` on a blank organization id."
+      },
+      {
+        "t": "2026-11-01T09:00:00Z",
+        "kind": "note",
+        "label": "Daily echopoint stops running",
+        "detail": "Its fan-out never settled; fixed by echopoint#742.",
+        "approx": true,
+        "link": "https://github.com/nanostack-dev/echopoint/pull/742"
+      },
+      {
+        "t": "2026-11-04T00:10:42Z",
+        "kind": "change",
+        "label": "Auth forgery draft updated to INVALID_ORGANIZATION_ID",
+        "detail": "The routine fixed the flow after echopoint#733 failed the 2026-11-03T19:41Z gate. It updated the draft only.",
+        "link": "https://github.com/nanostack-dev/echopoint/pull/733"
+      },
+      {
+        "t": "2026-11-04T11:45:14Z",
+        "kind": "change",
+        "label": "F-1 draft updated to 409 EPHEMERAL_JOB_COMPLETION_REQUIRED",
+        "detail": "Another session aligned the flow to #733. Draft only."
+      },
+      {
+        "t": "2026-11-04T12:16:23Z",
+        "kind": "change",
+        "label": "F-3 and F-5 drafts updated",
+        "detail": "Renamed and given the workspace header. Draft only."
+      },
+      {
+        "t": "2026-11-05T09:00:04Z",
+        "kind": "trigger",
+        "label": "Daily monitor runs; two flows fail on old assertions",
+        "detail": "`expected=200 actual=409` and `expected=BAD_REQUEST actual=INVALID_ORGANIZATION_ID` (executions `01a1aaef-cba6…`, `01a1aaef-cb7a…`)."
+      },
+      {
+        "t": "2026-11-05T12:11:00Z",
+        "kind": "detect",
+        "label": "Routine finds the two failed scheduled runs",
+        "approx": true
+      },
+      {
+        "t": "2026-11-05T12:12:00Z",
+        "kind": "note",
+        "label": "Cause confirmed: monitors run the latest published version",
+        "detail": "`internal/feature/flowschedules/service.go` `latestPublishedVersionID`; draft vs version diff shows the assertions.",
+        "approx": true
+      },
+      {
+        "t": "2026-11-05T12:13:10Z",
+        "kind": "mitigate",
+        "label": "Four drifted flows published"
+      },
+      {
+        "t": "2026-11-05T12:14:41Z",
+        "kind": "resolve",
+        "label": "Rescan: no draft differs from its published version"
+      },
+      {
+        "t": "2026-11-05T12:20:00Z",
+        "kind": "followup",
+        "label": "Suite script drift and monitor checks; skill lesson",
+        "approx": true
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The Daily echopoint monitor failed two flows on behaviour echopoint changed on purpose two days earlier",
+    "because": [
+      {
+        "text": "The monitor ran versions of the flows published on 2026-10-17/20, not the updated definitions",
+        "evidence": "Scheduled runs asserted `200` and `BAD_REQUEST`; only the published versions hold those values (`flows version list` diff)",
+        "because": [
+          {
+            "text": "A monitor launches a flow's latest published version, and a flow run from the CLI or gate launches the draft",
+            "evidence": "`flowschedules/service.go:521` `latestPublishedVersionID`; `flows launch` and `flows run` take no version",
+            "because": [
+              {
+                "text": "The 2026-11-04 updates changed only the drafts; nobody published them",
+                "evidence": "Draft `updated_at` 2026-11-04, latest version 2026-10-17/20",
+                "because": [
+                  {
+                    "text": "The fix procedure (update the gate flow, run it, see green) checks only the draft path",
+                    "evidence": "Workspace AGENTS.md cross-repo rule and skills `flow-suite-testing` named no publish step",
+                    "because": [
+                      {
+                        "id": "R1",
+                        "root": true,
+                        "text": "Nothing compares a flow's draft with its published version, so a suite or gate pass says nothing about what monitors run"
+                      }
+                    ]
+                  },
+                  {
+                    "text": "`flows update` accepts a change to a flow with published versions without a word",
+                    "evidence": "echopoint-cli `flows update` output: no warning about published versions",
+                    "because": [
+                      {
+                        "id": "R2",
+                        "root": true,
+                        "text": "The flow API and CLI do not tell an editor that monitors keep running an older published version"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The failure stayed unseen for three hours and the drift for a day",
+        "evidence": "Drift from 2026-11-04T00:10Z; failed run 09:00Z; found 12:11Z",
+        "because": [
+          {
+            "text": "The Daily monitor did not run from 2026-11-01 to 2026-11-05, so no earlier run showed the drift",
+            "evidence": "No scheduled executions of `1d02b3cf` before 2026-11-05T09:00Z since 2026-11-01; echopoint#742",
+            "because": [
+              {
+                "id": "R4",
+                "root": true,
+                "text": "A fan-out settle bug kept scheduled runs from finishing, so the monitor skipped every day (fixed by echopoint#742)"
+              }
+            ]
+          },
+          {
+            "text": "A failed monitor run only emails the monitor owner; the routine reads gate runs, not monitor runs",
+            "evidence": "Monitor `recipient_emails` = owner only; Run notes checked Deploy Router gates only",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The routine had no step that lists failed scheduled runs in the suite org"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The two other drifted flows (F-3, F-5) passed: their drafts differ only by the workspace header, and their published assertions already expected the fixed contract.",
+    "Most suite flows have no published version, so the monitor runs their drafts; the four tracker flows were the exception."
+  ],
+  "lessons": {
+    "well": [
+      "The monitor's per-flow error message named the expected and actual values, so the stale version was found in two queries.",
+      "The flow version API keeps every published definition, so the diff proved the cause."
+    ],
+    "wrong": [
+      "Three sessions updated these flows on 2026-11-04 and none checked whether they had published versions.",
+      "The routine's Run notes described the monitor as a runner of tags, not of published versions."
+    ],
+    "lucky": [
+      "The gate runs drafts. Had the gate run published versions, the #733 fix would have held echopoint prod.",
+      "The drift hit a dev-only CI monitor. A customer's monitor or a public status page flow with a stale published version would report a false outage."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Publish the four drifted flows and rescan for drift",
+      "type": "mitigate",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-05",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`run_suites.sh` prints `PUBLISH-DRIFT` for each tag flow whose draft differs from its latest published version",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-05",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "`flow-suite-testing` skill: find which version each caller runs; publish after updating a published flow",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-05",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "echopoint-cli `flows update` (and the flow editor) warn when the flow has a published version that monitors keep running",
+      "type": "prevent",
+      "owner": "echopoint-cli maintainers",
+      "due": "2026-11-19",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "`run_suites.sh` prints `MONITOR-FAILED` for every failed scheduled run in the last 24 h; the routine triages each",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-05",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A6",
+      "what": "Settle schedule runs whose executions are no longer visible (echopoint#742)",
+      "type": "prevent",
+      "owner": "echopoint maintainers",
+      "due": "2026-11-04",
+      "status": "done",
+      "fixes": [
+        "R4"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "The Daily echopoint monitor failed two security flows at 09:00Z because monitors run the latest published flow version and the 2026-11-04 fixes changed only drafts. Published; the suite script now flags draft/published drift.",
+    "external": "None: dev and CI only."
+  },
+  "links": [
+    {
+      "label": "Atelier postmortem",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1aba4-55d7-7b7b-b6ae-d69581e443b2"
+    },
+    {
+      "label": "echopoint#733 (contract change)",
+      "url": "https://github.com/nanostack-dev/echopoint/pull/733"
+    },
+    {
+      "label": "echopoint#742 (Daily monitor unblocked)",
+      "url": "https://github.com/nanostack-dev/echopoint/pull/742"
+    },
+    {
+      "label": "SEV4 gate flows pinned old behaviour",
+      "url": "https://claude.ai/artifact/Xxmi3NC6ppsTvwJDKYczLZ"
+    }
+  ]
+}

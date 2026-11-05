@@ -274,6 +274,14 @@ When a check turns out to contradict the contract, search every flow for other
 checks that assert the same behaviour and move them to the known-failure policy
 with it; a check that pins a contract bug as correct later blocks its fix.
 
+When the engine keeps published versions beside the editable definition, learn
+which one each caller runs: an ad-hoc or gate run can take the draft while a
+scheduled monitor takes the latest published version. After you update a flow
+that has a published version, publish the update too, and have the suite runner
+report every flow whose draft differs from its latest published version. Without
+that, the gate passes on the fix and the monitor keeps failing on the old
+assertion ([monitor ran a stale published flow](../docs/postmortems/2026-11-05-monitor-ran-stale-published-flow.md)).
+
 When a request contract tightens (a new required header, parameter or field),
 migrate every request the suite sends: the modules and subflows a tagged run
 reaches through its callers, request definitions stored inside bodies that the
