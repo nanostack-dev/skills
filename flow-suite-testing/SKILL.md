@@ -94,6 +94,12 @@ authorization requirements.
    each one that did not complete still owns: the rerun creates its own data, so its
    green result says nothing about the first run's leftovers
    ([leaked cleanup](../docs/postmortems/2026-10-23-suite-transport-reset-leaked-cleanup.md)).
+   A write reset after it was sent may still have been applied, and its cleanup
+   cannot read an id from a response that never came: find what the flow created
+   by a unique key it chose (an email or name with the run id) in the cleanup itself.
+   Put the rerun and the leak report in every caller of the suite, the deploy gate
+   first: a fix in one script leaves the gate that holds prod without it
+   ([gate resets](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-05-gate-transport-resets.md)).
    A flow that fails on some deploys of unchanged code and passes on others carries
    state drawn per process: a restart re-rolls it, so each replica can run a different
    order. Treat a pass after such failures as a coin flip and read the server's
