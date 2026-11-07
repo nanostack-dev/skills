@@ -251,6 +251,17 @@ branch does not conceal unrelated event outcomes.
   ([license cache](../docs/postmortems/2026-11-03-license-cache-gate-flake.md)).
 - Correlate each expectation with this run's resource and action, not event type
   alone. Check important payload fields and relevant authentication metadata.
+- A **shared collector** receives every run's events: a vendor webhook registered
+  once per account or connection (Stripe, GitHub, Clerk, Resend, any integration
+  capture webhook), or any endpoint that outlives one run. Concurrent runs then
+  deliver the same event type to the same wait. Put the correlation check in the
+  selector, the condition that decides which delivery the wait takes, so another
+  run's event is skipped. Correlate on a value this run created and read from an
+  upstream node's output (`$.data.object.id equals {{customer.id}}`), a loop
+  variable or a flow input. A literal or an environment value matches every run's
+  event. A check that runs only after the claim fails the wait on another run's
+  event ([Echopoint ADR-0029](https://github.com/nanostack-dev/echopoint/blob/main/docs/adr/0029-an-integration-events-checks-select-this-runs-delivery.md)).
+  Treat a compiler or build warning about an uncorrelated event as a defect.
 - Write counts that hold under any claim order. Express N occurrences of one event
   as one expectation with an exact count (min N, max N), and bound a catch-all
   ("no other X") by the total the specific expectations require. A matcher may

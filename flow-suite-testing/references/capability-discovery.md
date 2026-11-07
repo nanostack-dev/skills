@@ -21,7 +21,7 @@ Use small disposable probes for behavior that documentation leaves ambiguous.
 | Variables | Available scopes, precedence and overlays; secure input mechanisms; generator evaluation time and subflow input binding |
 | Assertions | Supported extractors/operators and their types; exact versus substring matching; expected/actual diagnostics; templated assertion values |
 | Polling | Native polling or supported harness loop; input visibility; deadlines, intervals and final failure evidence |
-| Event observation | Isolated capture support; resource correlation; event matching/consumption; duplicate and forbidden-event checks; observation window |
+| Event observation | Isolated capture support; which collectors runs share (vendor or integration webhooks); whether checks select the delivery or run after the claim; resource correlation; event matching/consumption; duplicate and forbidden-event checks; observation window |
 | Secrets | Encrypted storage where available, permissions, value-read behavior and redaction in every result/export channel |
 | Results | Completion API or report, per-node statuses, skipped/unevaluated outcomes, actual selected identities and cleanup results |
 | CI | Required gate and runtime, revision/selection, credentials, report retention, cleanup and permitted failure-recovery policy |
