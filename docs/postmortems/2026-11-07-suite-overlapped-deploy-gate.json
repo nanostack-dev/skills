@@ -1,0 +1,119 @@
+{
+  "title": "Routine tag run overlapped the echopoint deploy gate: flow folders 409 FLOW_TREE_CONFLICT",
+  "short": "Suite overlapped gate",
+  "service": "echopoint dogfood suites (prod CI org)",
+  "date": "2026-11-07",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": ["Nanostack routine (echopoint-investigation)"],
+  "summary": "At 18:34Z the routine's second ad-hoc soak of the `echopoint` tag ran while Deploy Router run 42401825800 (echopoint#779) was running the same tag as its post-deploy gate. Both runs use the prod CI org and its `echopointOrgId`. The flow-tree lock (`pglock.TryAdvisoryXactLock` on `echopoint.flow_tree:<org>`) rejects a second writer at once instead of waiting, so the routine's `flow folders` flow got **409 FLOW_TREE_CONFLICT** on `cleanup-sibling`. The gate stayed green and promoted prod at 18:37Z, but only because its own `flow folders` won the lock. `run_suites.sh` now waits for any active Deploy Router run before each tag and flags any overlap.",
+  "impact": {
+    "text": "No customer impact and no held deploy. One routine soak run read 56/57 instead of 57/57. Had the gate's `flow folders` lost the lock instead, the gate would have gone red and held echopoint#779 off prod until a human reran it.",
+    "numbers": [
+      {"value": "1 / 57", "label": "routine flows failed (409)"},
+      {"value": "0", "label": "gate flows failed (by luck)"},
+      {"value": "2.5 min", "label": "overlap of routine run and gate suite"}
+    ]
+  },
+  "trigger": "An ad-hoc `echopoint` tag run (soak of a newly tagged flow) started at 18:35Z without checking for an active Deploy Router run; the gate's suite for echopoint#779 had started at 18:33:37Z.",
+  "detection": "The routine read its own tag result (56/57) and matched the failing execution's start time against the gate's job times. Detection was good enough for this side; the new `GATE-OVERLAP` line in `run_suites.sh` now names the overlap directly.",
+  "resolution": "The routine reran the tag once the gate finished (57/57) and added `gate_wait` and `gate_overlap` to `run_suites.sh`, so scheduled runs never start a tag while a Deploy Router run is queued or in progress.",
+  "contributing": [
+    "SKILL.md says not to run tags during a gate, but nothing enforced it.",
+    "Soaks after tagging were run by hand with `flows run --tag`, outside `run_suites.sh`.",
+    "The tree lock fails fast; any two writers to the folder tree in one org conflict.",
+    "The dogfood suites and the post-deploy gate share one CI org and one `echopointOrgId`."
+  ],
+  "responders": [{"role": "Detection and fix", "name": "Nanostack routine (echopoint-investigation)"}],
+  "messaging": {
+    "internal": "The routine's tag soak overlapped the echopoint gate and its `flow folders` hit a 409 FLOW_TREE_CONFLICT. The gate was green by luck. `run_suites.sh` now waits for Deploy Router runs. Open: echopoint should queue or retry on the tree lock, or the folders flow should use a throwaway org.",
+    "external": "None: no impact."
+  },
+  "timeline": {
+    "events": [
+      {"t": "2026-11-07T18:29:13Z", "kind": "note", "label": "Routine tag soak 1 starts (new flow tagged)", "detail": "runs/2026-11-07T1808/tag1"},
+      {"t": "2026-11-07T18:32:08Z", "kind": "change", "label": "echopoint#779 merged", "link": "https://github.com/nanostack-dev/echopoint/pull/779"},
+      {"t": "2026-11-07T18:32:50Z", "kind": "change", "label": "Deploy Router 42401825800 created", "link": "https://github.com/nanostack-dev/infra/actions/runs/42401825800"},
+      {"t": "2026-11-07T18:33:37Z", "kind": "note", "label": "Gate echopoint suite starts on dev", "link": "https://github.com/nanostack-dev/infra/actions/runs/42401825800"},
+      {"t": "2026-11-07T18:34:15Z", "kind": "trigger", "label": "Routine `flow folders` runs during the gate", "detail": "execution 01a1b74a-332e-7b74-bf01-279defac1f85; soak 1's tail and soak 2 overlap the gate"},
+      {"t": "2026-11-07T18:34:17Z", "kind": "note", "label": "cleanup-sibling: 409 FLOW_TREE_CONFLICT", "detail": "the gate held the org's tree lock"},
+      {"t": "2026-11-07T18:35:12Z", "kind": "detect", "label": "Soak 1 ends 56/57; routine reads the 409"},
+      {"t": "2026-11-07T18:36:07Z", "kind": "mitigate", "label": "Gate suite ends green (57/57)", "link": "https://github.com/nanostack-dev/infra/actions/runs/42401825800"},
+      {"t": "2026-11-07T18:37:43Z", "kind": "note", "label": "Gate promotes echopoint to prod"},
+      {"t": "2026-11-07T18:41:18Z", "kind": "resolve", "label": "Soak 2 ends 57/57"},
+      {"t": "2026-11-07T19:00:00Z", "kind": "followup", "label": "gate_wait and gate_overlap added to run_suites.sh", "approx": true}
+    ]
+  },
+  "whys": {
+    "problem": "A routine suite run failed with 409, and the echopoint deploy gate ran with a real chance of a false red that would hold prod.",
+    "because": [
+      {
+        "text": "`flow folders` got 409 FLOW_TREE_CONFLICT deleting a folder while the gate's suite ran in the same org.",
+        "evidence": "execution 01a1b74a… at 18:34:17Z; gate suite 18:33:37–18:36:07Z",
+        "because": [
+          {
+            "text": "The flow-tree lock rejects a second writer at once instead of waiting.",
+            "evidence": "echopoint internal/feature/flows/treelock.go: pglock.TryAdvisoryXactLock on echopoint.flow_tree:<org>",
+            "because": [
+              {
+                "text": "The tree lock was designed for one writer per org; concurrent automated writers in one org were not a design case.",
+                "root": true,
+                "id": "R2"
+              }
+            ]
+          },
+          {
+            "text": "The routine started a tag run while a Deploy Router run was in progress.",
+            "evidence": "soak runs 18:29–18:41Z; Deploy Router 42401825800 18:32:50–18:37:43Z",
+            "because": [
+              {
+                "text": "The soak ran by hand with `flows run --tag`, not through `run_suites.sh`.",
+                "because": [
+                  {
+                    "text": "The 'never during a gate' rule lived only in SKILL.md; no script checked for an active Deploy Router run.",
+                    "evidence": "run_suites.sh before this run had no gate check",
+                    "root": true,
+                    "id": "R1"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "The overlap could have turned the gate red, not only the routine run.",
+        "lens": "impact",
+        "because": [
+          {
+            "text": "The gate and the dogfood suites share the prod CI org and its `echopointOrgId`, so either side can lose the lock.",
+            "evidence": "both runs use org_3AbVP9cGsWfmaWVfChGHmAmdSAY",
+            "because": [
+              {
+                "text": "Flows that write the folder tree run in the shared CI org instead of a per-run throwaway org.",
+                "root": true,
+                "id": "R3"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {"id": "A1", "what": "run_suites.sh waits for queued or in-progress Deploy Router runs before each tag (`gate_wait`)", "type": "prevent", "owner": "Nanostack routine (echopoint-investigation)", "due": "2026-11-07", "status": "done", "fixes": ["R1"]},
+    {"id": "A2", "what": "run_suites.sh prints `GATE-OVERLAP` when a Deploy Router run started during a tag", "type": "detect", "owner": "Nanostack routine (echopoint-investigation)", "due": "2026-11-07", "status": "done", "fixes": ["R1"]},
+    {"id": "A3", "what": "Run every soak through run_suites.sh (or after gate_wait), never a bare `flows run --tag`; noted in SKILL.md", "type": "process", "owner": "Nanostack routine (echopoint-investigation)", "due": "2026-11-07", "status": "done", "fixes": ["R1"]},
+    {"id": "A4", "what": "Tree lock: wait briefly or retry on contention instead of failing at once (TryAdvisoryXactLock → bounded wait)", "type": "prevent", "owner": "echopoint maintainers", "due": "2026-11-21", "status": "open", "fixes": ["R2"]},
+    {"id": "A5", "what": "Move `echopoint: flow folders` to a per-run throwaway org so its tree writes never share a lock with the gate", "type": "mitigate", "owner": "Nanostack routine (echopoint-investigation)", "due": "2026-11-14", "status": "open", "fixes": ["R3"]}
+  ],
+  "lessons": {
+    "well": ["The failing execution's timestamps matched the gate's job window within minutes, so the cause was clear without guessing."],
+    "wrong": ["A documented rule with no check in the script was skipped by a hand-run soak."],
+    "lucky": ["The gate's own `flow folders` won the lock; the other order would have held echopoint#779 off prod with a false red."]
+  },
+  "links": [
+    {"label": "Deploy Router 42401825800", "url": "https://github.com/nanostack-dev/infra/actions/runs/42401825800"},
+    {"label": "echopoint#779", "url": "https://github.com/nanostack-dev/echopoint/pull/779"}
+  ]
+}
