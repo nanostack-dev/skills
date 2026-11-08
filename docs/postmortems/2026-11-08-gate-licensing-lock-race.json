@@ -1,0 +1,276 @@
+{
+  "title": "Echopoint gate red: two flows raced Anchor's per-product licensing lock",
+  "short": "Licensing lock race",
+  "service": "flow-suite",
+  "date": "2026-11-08",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The echopoint post-deploy gate for `4bd153dc` (echopoint#786) failed at 17:42Z on one flow, so prod echopoint stayed on the previous commit for about 12 minutes. `echopoint: integration operation outputs` PATCHed its throwaway org's license and Anchor answered 409 `LICENSING_WRITE_IN_PROGRESS`: 2 ms earlier, `license gauges under concurrent creates` had PATCHed another org's license on the same Nanostack product, and Anchor serializes licensing writes per product with a try-lock that refuses at once (ADR-0018). The gate runs the tag in parallel, and seven echopoint flows now write licenses on that one product, none of them retrying the documented 409. The next merge's gate passed and promoted at 17:54Z. Every license PATCH on the shared product now goes through a module that repeats the PATCH while it answers 409.",
+  "impact": {
+    "text": "Dev and CI only. One echopoint deploy (test-only change) waited about 12 minutes for prod; no customer saw a change. No resource leaked: the flow's `always` cleanups deleted the throwaway org and key.",
+    "numbers": [
+      {
+        "value": "1/58",
+        "label": "gate flows red"
+      },
+      {
+        "value": "~12 min",
+        "label": "prod promotion held"
+      },
+      {
+        "value": "2 ms",
+        "label": "between the competing PATCHes"
+      }
+    ]
+  },
+  "trigger": "At 17:40:42.072Z Anchor replica 1 refused `PATCH …/organizations/org_3Lpmyyl…/license` (409 in 758 µs) while replica 2 held the product's licensing lock for the `license gauges` PATCH (200 at .074Z).",
+  "detection": "The Deploy Router gate failed at 17:42:40Z and named the node (`lic-stripe`, expected 200, got 409). The routine read it at 18:08Z and took the error code from the node result. Detection was good enough: the gate is the check.",
+  "resolution": "The next echopoint merge (#787) passed its gate at 17:5xZ and promoted all of `main` to prod at 17:54:33Z. The permanent fix replaces every license PATCH on `{{nanostackProductId}}` with module `license: patch through the licensing lock` (`4606aa53`), which polls the PATCH until it answers the expected status.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-06T12:08:00Z",
+        "approx": true,
+        "kind": "change",
+        "label": "`license gauges` flow joins the echopoint tag",
+        "detail": "Its PATCH on the shared product sits right after org create, like most of the license flows."
+      },
+      {
+        "t": "2026-11-07T18:08:00Z",
+        "approx": true,
+        "kind": "change",
+        "label": "`integration operation outputs` joins the tag",
+        "detail": "Seventh echopoint-tag flow to PATCH a license on the shared Nanostack product."
+      },
+      {
+        "t": "2026-11-08T17:33:17Z",
+        "kind": "change",
+        "label": "echopoint#786 merged (test-only)",
+        "link": "https://github.com/nanostack-dev/echopoint/pull/786"
+      },
+      {
+        "t": "2026-11-08T17:39:40Z",
+        "kind": "change",
+        "label": "Deploy Router 42506060864 starts",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/42506060864"
+      },
+      {
+        "t": "2026-11-08T17:40:42Z",
+        "kind": "trigger",
+        "label": "lic-stripe PATCH gets 409 LICENSING_WRITE_IN_PROGRESS",
+        "detail": "Replica 2 answered the `license gauges` PATCH 200 at .074Z; replica 1 refused this one at .072Z. VictoriaLogs `deployment.environment:dev`."
+      },
+      {
+        "t": "2026-11-08T17:42:40Z",
+        "kind": "detect",
+        "label": "Gate fails: 1 flow red, prod promotion skipped",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/42506060864"
+      },
+      {
+        "t": "2026-11-08T17:50:07Z",
+        "kind": "mitigate",
+        "label": "Next deploy (#787) starts; its gate passes",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/42506923417"
+      },
+      {
+        "t": "2026-11-08T17:54:33Z",
+        "kind": "resolve",
+        "label": "Prod echopoint promoted",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/42506923417"
+      },
+      {
+        "t": "2026-11-08T18:08:51Z",
+        "kind": "note",
+        "label": "Routine reads the red gate and the node result"
+      },
+      {
+        "t": "2026-11-08T18:40:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "Retry module 4606aa53 created; flows switched"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The echopoint deploy of 4bd153dc did not reach prod: its post-deploy gate was red",
+    "because": [
+      {
+        "text": "`integration operation outputs` node lic-stripe expected 200 and got 409 LICENSING_WRITE_IN_PROGRESS",
+        "evidence": "Gate log `✗ Flow 2e4b608f…`; node result `response_body_parsed.errors[0].code`",
+        "because": [
+          {
+            "text": "Another flow's license PATCH on the same Nanostack product held Anchor's licensing lock 2 ms earlier",
+            "evidence": "VictoriaLogs 17:40:42: replica 2 `PATCH …org_3Lpmyvw…/license -> 200`, replica 1 `-> 409 (758µs)`",
+            "because": [
+              {
+                "text": "Anchor takes a per-product try-lock for every licensing write and refuses a competing one at once",
+                "evidence": "anchor `license_write_lock.go` `TryAdvisoryXactLock`; ADR-0018 says the client retries",
+                "because": [
+                  {
+                    "text": "The flows send each license PATCH once and expect 200, though the contract says to retry the 409",
+                    "evidence": "11 PATCH nodes in 7 echopoint-tag flows, plain request nodes with a status 200 or 400 assertion",
+                    "because": [
+                      {
+                        "id": "R1",
+                        "root": true,
+                        "text": "No helper or guide rule makes a write to a provider-serialized resource retry its documented conflict"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "text": "The throwaway-org pattern isolates each run's org, but every org lives in the one shared Nanostack product",
+                "evidence": "All 11 PATCH URLs use `{{nanostackProductId}}`; the lock key is tenant + product",
+                "because": [
+                  {
+                    "text": "Seven tag flows write licenses on that product, most right after org create, so their PATCHes cluster",
+                    "evidence": "Exports 2026-11-08; gauges added 11-06, integration flows 11-07",
+                    "because": [
+                      {
+                        "id": "R2",
+                        "root": true,
+                        "text": "Flow isolation was judged at the org, while the provider's lock scope is the product"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "text": "Serial authoring runs and two tag soaks never showed it: the race needs two PATCHes within ~10 ms",
+            "evidence": "3 serial greens + 2 tag runs per new flow (Run notes); 14 green tag runs since 11-07",
+            "because": [
+              {
+                "text": "The soak proves a flow alone, not its contention with siblings at gate parallelism",
+                "because": [
+                  {
+                    "id": "R3",
+                    "root": true,
+                    "text": "The authoring checklist has no step that lists shared locks a new flow writes through"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "One refused write failed the flow and held prod, though waiting 10 ms would have succeeded",
+        "evidence": "The holding PATCH took 9.9 ms",
+        "because": [
+          {
+            "text": "Anchor refuses instead of waiting a bounded time, so every overlap becomes a client error",
+            "evidence": "`withLicenseWrite` returns ErrLicensingWriteInProgress when the try-lock fails",
+            "because": [
+              {
+                "id": "R4",
+                "root": true,
+                "text": "Org license writes share a product-wide zero-wait lock (code note: use finer locks if contention warrants)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The gate's rerun step reruns transport failures only, so a retryable 409 stays red.",
+    "Gates followed each other quickly during the framework migration (six deploys in 30 minutes), which raised the number of gate runs exposed to the race."
+  ],
+  "lessons": {
+    "well": [
+      "The node result kept the response body, so the error code and the competing write were found in minutes.",
+      "Every `always` cleanup completed: no leaked org or key."
+    ],
+    "wrong": [
+      "Seven flows grew around one shared lock without anyone listing it.",
+      "The same class (a provider lock that refuses at once) already showed with FLOW_TREE_CONFLICT on 2026-11-07 and was fixed per flow, not as a rule."
+    ],
+    "lucky": [
+      "The held change was test-only, and another merge followed ten minutes later and promoted it.",
+      "Anchor-tag flows PATCH licenses on their own products, so the two gates did not race each other."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Route every license PATCH on the shared product through module `4606aa53` (poll until the expected status)",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-08",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R2"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "flow-suite-testing rule: a write the provider serializes per shared scope retries its documented conflict in a poll module",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-08",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "Authoring checklist: name the provider locks a new flow writes through and grep the tag for siblings on the same scope",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-08",
+      "status": "done",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Decide whether an org license write takes a per-org lock or waits a bounded time for the product lock (ADR-0018 change)",
+      "type": "mitigate",
+      "owner": "Anchor maintainers",
+      "due": "2026-11-22",
+      "status": "open",
+      "fixes": [
+        "R4"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Echopoint gate red at 17:42Z on a flow-suite race: two flows PATCHed licenses on the shared Nanostack product 2 ms apart and Anchor's per-product lock refused one (409, documented). Prod held ~12 min until #787's gate. License PATCHes now retry the 409 through a poll module.",
+    "external": "None: dev and CI only."
+  },
+  "links": [
+    {
+      "label": "Atelier",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1bc67-8f42-7de9-afb4-4a4545e563bb"
+    },
+    {
+      "label": "Deploy Router 42506060864",
+      "url": "https://github.com/nanostack-dev/infra/actions/runs/42506060864"
+    },
+    {
+      "label": "echopoint#786",
+      "url": "https://github.com/nanostack-dev/echopoint/pull/786"
+    },
+    {
+      "label": "Related: tree lock race",
+      "url": "2026-11-07-suite-overlapped-deploy-gate.md"
+    }
+  ]
+}

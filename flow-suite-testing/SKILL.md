@@ -62,6 +62,12 @@ authorization requirements.
    other run of it (the gate, a monitor, a soak) contends for the same lock, and its
    totals can only be lower bounds. In its own tenant the totals are exact
    ([suite overlapped gate](../docs/postmortems/2026-11-07-suite-overlapped-deploy-gate.md)).
+   Name the scope of each lock a write takes: when it is wider than the tenant the
+   flow owns (a per-product licensing lock above throwaway orgs), grep the suite for
+   siblings writing in that scope, and send the write through a poll that repeats it
+   while it answers the documented conflict (409 "in progress"). The gate runs flows
+   in parallel; serial soaks never show the race
+   ([licensing lock race](../docs/postmortems/2026-11-08-gate-licensing-lock-race.md)).
 3. **Build.** Use the engine's supported editor, CLI, API or import schema. Give
    nodes stable, readable identifiers and names that agree with their assertions.
    Preserve unrelated fields when updating a definition.
