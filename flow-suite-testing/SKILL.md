@@ -105,6 +105,10 @@ authorization requirements.
    Put the rerun and the leak report in every caller of the suite, the deploy gate
    first: a fix in one script leaves the gate that holds prod without it
    ([gate resets](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-05-gate-transport-resets.md)).
+   The callers are the local CLI script, the deploy gate and the scheduled monitors;
+   a monitor reruns nothing, so read each failed scheduled run's node results for a
+   transport error and uncompleted cleanups
+   ([monitor transport failure](https://github.com/nanostack-dev/echopoint/blob/main/docs/postmortems/2026-11-08-monitor-transport-failure.md)).
    A flow that fails on some deploys of unchanged code and passes on others carries
    state drawn per process: a restart re-rolls it, so each replica can run a different
    order. Treat a pass after such failures as a coin flip and read the server's
