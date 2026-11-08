@@ -57,6 +57,11 @@ authorization requirements.
    affected gates. Finish with a known source of truth and execution target.
 2. **Design.** Sketch setup, independent branches, observations and cleanup before
    adding nodes. Identify each dependency and each owned resource to remove.
+   A flow whose writes take a lock or limit scoped to a tenant (a folder tree lock,
+   a per-organization quota) creates its own tenant each run: in a shared tenant every
+   other run of it (the gate, a monitor, a soak) contends for the same lock, and its
+   totals can only be lower bounds. In its own tenant the totals are exact
+   ([suite overlapped gate](../docs/postmortems/2026-11-07-suite-overlapped-deploy-gate.md)).
 3. **Build.** Use the engine's supported editor, CLI, API or import schema. Give
    nodes stable, readable identifiers and names that agree with their assertions.
    Preserve unrelated fields when updating a definition.
