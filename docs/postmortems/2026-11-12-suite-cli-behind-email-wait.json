@@ -1,0 +1,175 @@
+{
+  "title": "Echopoint suite red: the routine host's CLI predated email_wait when a gate flow gained an email wait",
+  "short": "Suite CLI behind",
+  "service": "echopoint flow suite (routine host)",
+  "date": "2026-11-12",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "At 17:35Z another session added an email wait to `echopoint: daily invitation email limit`, a flow in the `echopoint` gate tag. CLI v3.15.0, the first release that declares the `email_wait` runner capability, was released at 16:53Z, but the routine host still ran v3.14.3. At 18:16Z the routine's echopoint suite failed the flow: the API refused the embedded runner's claim and told it to upgrade the CLI. The gate installs the latest CLI and the Cloud worker pins runner v0.108.0, so only the routine host was affected. `run_suites.sh` now updates the CLI in its preflight and prints the version; the flow is green 2x on v3.15.0.",
+  "impact": {
+    "text": "Routine host only. One red flow in one run (echopoint 59/60). Gates, monitors and customers were unaffected.",
+    "numbers": [
+      {
+        "value": "1 of 60",
+        "label": "echopoint flows red"
+      },
+      {
+        "value": "~80 min",
+        "label": "between the release and the failing run"
+      }
+    ]
+  },
+  "trigger": "The routine ran the echopoint tag with CLI v3.14.3 after the flow gained an `email_wait` node.",
+  "detection": "`run_suites.sh` printed FAILED with the CLI's own message: the runner that claimed it cannot run an email wait; upgrade the CLI.",
+  "resolution": "`echopoint update` to v3.15.0, two green reruns, and an update step in the `run_suites.sh` preflight.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-12T16:04:21Z",
+        "kind": "change",
+        "label": "echopoint#850: email wait behind a runner capability gate",
+        "link": "https://github.com/nanostack-dev/echopoint/pull/850"
+      },
+      {
+        "t": "2026-11-12T16:53:27Z",
+        "kind": "change",
+        "label": "CLI v3.15.0 released (declares email_wait)",
+        "link": "https://github.com/nanostack-dev/echopoint-cli/releases/tag/v3.15.0"
+      },
+      {
+        "t": "2026-11-12T17:35:55Z",
+        "kind": "change",
+        "label": "Gate flow 1342edd0 gains an email wait"
+      },
+      {
+        "t": "2026-11-12T18:16:00Z",
+        "approx": true,
+        "kind": "trigger",
+        "label": "Routine runs the flow on host CLI v3.14.3"
+      },
+      {
+        "t": "2026-11-12T18:17:00Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "run_suites.sh prints FAILED: upgrade the CLI"
+      },
+      {
+        "t": "2026-11-12T18:20:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Host CLI updated to v3.15.0"
+      },
+      {
+        "t": "2026-11-12T18:22:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Flow green 2x on v3.15.0"
+      },
+      {
+        "t": "2026-11-12T18:30:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "run_suites.sh updates the CLI in its preflight"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The routine's echopoint suite failed `daily invitation email limit` with an upgrade-the-CLI refusal",
+    "because": [
+      {
+        "text": "The host CLI v3.14.3 embeds a runner that does not declare email_wait, and the flow now has an email wait",
+        "evidence": "`echopoint version` v3.14.3; flow 1342edd0 updated 17:35:55Z; claim refused with the upgrade message",
+        "because": [
+          {
+            "text": "The routine kept whatever CLI the host had; only the gate installs the latest release",
+            "evidence": "Gate job log `cli_version: latest`",
+            "because": [
+              {
+                "id": "R1",
+                "root": true,
+                "text": "`run_suites.sh` had no step that keeps the host CLI on the released version"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The refusal showed up as a product failure in the run summary",
+        "because": [
+          {
+            "text": "`run_suites.sh` prints FAILED for any failed flow and showed no CLI version",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "The suite report did not name the CLI it ran, so a version gap looked like a flow failure"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The flow change and the CLI release landed the same afternoon, between two routine runs."
+  ],
+  "lessons": {
+    "well": [
+      "The API refused with a message that named the fix.",
+      "The gate and the Cloud worker were already current."
+    ],
+    "wrong": [
+      "The routine host drifted from the client customers get by default."
+    ],
+    "lucky": [
+      "The flow change came after the CLI release; the gate would have run the new flow green."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "`run_suites.sh` preflight runs `echopoint update` before the tags",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-12",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`run_suites.sh` prints `CLI <version>` and `CLI-UPDATED`/`CLI-UPDATE-FAILED`",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-12",
+      "status": "done",
+      "fixes": [
+        "R2"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigation",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Echopoint suite red on daily invitation email limit: the routine host CLI predated email_wait. CLI updated, preflight now updates it. Host only."
+  },
+  "links": [
+    {
+      "label": "echopoint#850",
+      "url": "https://github.com/nanostack-dev/echopoint/pull/850"
+    },
+    {
+      "label": "Atelier",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1d106-f49f-7e01-bdbb-3d89900c1622"
+    }
+  ]
+}

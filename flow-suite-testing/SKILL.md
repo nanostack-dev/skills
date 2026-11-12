@@ -287,6 +287,10 @@ branch does not conceal unrelated event outcomes.
   contract. Account for retries and event identifiers when deduplication matters.
 - Use a documented observation/settling window for absence or extra-event checks.
   Seeing the first expected event does not establish that no later event arrives.
+- Before a step that stops the producer (clears its endpoint, deletes it), wait for
+  every event the run expects, not the first one: a delivery retried after a reset
+  lands seconds later, and the producer drops it once the endpoint is gone
+  ([2026-11-12 postmortem](https://github.com/nanostack-dev/skills/blob/main/docs/postmortems/2026-11-12-event-delivery-retry-after-clear.md)).
 - Keep pending, missing and unevaluated expectations distinguishable from passes.
   Inspect individual matches and mismatches in the final result.
 - Verify payload and diagnostics redaction before publishing captured events.
