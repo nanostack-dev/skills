@@ -1,0 +1,269 @@
+{
+  "title": "Anchor suite red: a retried organization.created delivery landed after the flow cleared the event endpoint",
+  "short": "Event retry after clear",
+  "service": "anchor product events (dev) / anchor flow suite",
+  "date": "2026-11-12",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The 18:08Z routine run of the anchor flow suite failed `anchor: product event delivery`: the `events` wait never received `organization.created`. Anchor's first two delivery attempts of that event hit a TCP reset from the dev host to the Cloudflare edge. The third attempt ran 10 ms after the flow cleared the product's event endpoint, so Anchor found no target and dropped the event without a log line. The flow waited only for `organization.updated` and a 1 s settle before the clear, which is shorter than Anchor's retry backoff. The flow now waits for both subscribed events before the clear; it is green 3x serial and in two tag soaks.",
+  "impact": {
+    "text": "Dev and CI only. One red flow in one routine suite run (anchor 32/33). The same race in an anchor post-deploy gate would hold prod: the gate reruns transport errors only, and this failure reads as an assertion failure.",
+    "numbers": [
+      {
+        "value": "1 of 33",
+        "label": "anchor flows red in the 18:08Z run"
+      },
+      {
+        "value": "2",
+        "label": "delivery attempts reset by peer"
+      },
+      {
+        "value": "10 ms",
+        "label": "between the clear and the dropped retry"
+      }
+    ]
+  },
+  "trigger": "Two delivery attempts of `organization.created` (pgqueue job 382880) failed with `connection reset by peer` from 172.18.0.4 to 172.64.80.1 on the dev host 1340p.",
+  "detection": "The routine's suite run reported the flow FAILED at 18:13:21Z (`1 of 3 expected events failed`). The cause was found in the dev pgqueue table: Anchor logs neither failed attempts nor dropped events, so VictoriaLogs showed nothing.",
+  "resolution": "Three manual reruns were green. The flow was changed at 18:27:55Z: `wait-delivered` now has two groups (`organization.created` and `organization.updated`, min 1 each) and keeps the signature and no-secret checks at node level.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-03T15:14:25Z",
+        "kind": "change",
+        "label": "Flow saved: clear after first event + 1 s settle",
+        "detail": "`wait-delivered` asserted `$.type equals organization.updated` only."
+      },
+      {
+        "t": "2026-11-12T18:12:49.421Z",
+        "kind": "note",
+        "label": "Run creates product with an event endpoint",
+        "link": "http://100.83.213.10:8428/select/vmui/"
+      },
+      {
+        "t": "2026-11-12T18:12:49.714Z",
+        "kind": "note",
+        "label": "Org created; job 382880 enqueued (organization.created)"
+      },
+      {
+        "t": "2026-11-12T18:12:49.800Z",
+        "approx": true,
+        "kind": "trigger",
+        "label": "Delivery attempt 1 reset by peer",
+        "detail": "`last_error`: `read tcp 172.18.0.4:54810->172.64.80.1:443: read: connection reset by peer` (attempts 1 and 2; exact times not stored)."
+      },
+      {
+        "t": "2026-11-12T18:12:50.071Z",
+        "kind": "note",
+        "label": "organization.updated delivered to the run webhook",
+        "detail": "Prod echopoint `POST /webhook/EsCj… -> 200`; the only delivery of the run."
+      },
+      {
+        "t": "2026-11-12T18:12:51.316Z",
+        "kind": "note",
+        "label": "Flow clears the endpoint (product PUT 200)"
+      },
+      {
+        "t": "2026-11-12T18:12:51.382Z",
+        "kind": "note",
+        "label": "Attempt 3 finds no target; job done, event dropped",
+        "detail": "Job available 18:12:51.326, done 18:12:51.382, no POST."
+      },
+      {
+        "t": "2026-11-12T18:13:21Z",
+        "kind": "detect",
+        "label": "events wait fails: organization.created missing"
+      },
+      {
+        "t": "2026-11-12T18:20:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "Three manual reruns green"
+      },
+      {
+        "t": "2026-11-12T18:27:55Z",
+        "kind": "resolve",
+        "label": "Flow waits for both events before the clear"
+      },
+      {
+        "t": "2026-11-12T18:35:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "Skill lesson and postmortem PR in nanostack-dev/skills"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The anchor suite reported `organization.created` missing from the event delivery flow",
+    "because": [
+      {
+        "text": "Anchor dropped the event: its third attempt ran after the flow had cleared the product's event endpoint",
+        "evidence": "Dev `pgqueue_jobs` 382880: attempts 3, available 18:12:51.326, done .382; product PUT 18:12:51.316; one POST only in prod echopoint logs",
+        "because": [
+          {
+            "text": "Attempts 1 and 2 failed with TCP resets from the dev host to the Cloudflare edge",
+            "evidence": "Job `last_error`; same resets on the dev runner (18:03Z) and the routine host (18:1xZ) this hour",
+            "because": [
+              {
+                "text": "The dev host's outbound path to 172.64.80.1 resets connections now and then; the cause is not found",
+                "because": [
+                  {
+                    "id": "R2",
+                    "root": true,
+                    "text": "Nobody owns finding why 1340p's path to the Cloudflare edge resets connections (ledger rows 52/76, action A5 still open)"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The flow cleared the endpoint 1.2 s after the first delivery: it waited for organization.updated only, then 1 s",
+            "evidence": "Flow export `exports/product-event-delivery-pre-2026-11-12.json`: `wait-delivered` node assertions, `settle` 1000 ms",
+            "because": [
+              {
+                "text": "The flow assumed each event arrives once, on the first try; Anchor retries with a 1 s exponential jittered backoff",
+                "evidence": "`anchor/apps/anchor/internal/events/worker.go` BackoffBase 1 s, 6 attempts",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "The flow-suite skill asks for a settle window before absence checks, not for every expected event before stopping the producer"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "text": "Anchor reads the delivery target at attempt time and returns success when it is gone",
+            "evidence": "`worker.go` handleJob: `if !found { return nil }`",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "No decision says whether events queued while an endpoint was subscribed survive a later clear"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "One reset turned the run red, and the cause took a database query to find",
+        "because": [
+          {
+            "text": "The failure reads as WEBHOOK_WAIT_EXPECTATIONS_FAILED, so the suite and gate transport reruns skip it",
+            "evidence": "`run_suites.sh` transport regex; ci-workflows#42 reruns transport errors only",
+            "because": [
+              {
+                "text": "The reset happened inside the system under test, not in the runner, so only the flow can absorb it",
+                "because": [
+                  {
+                    "id": "R4",
+                    "root": true,
+                    "text": "Anchor's event worker logs only permanent failures: failed attempts and dropped events leave no log line"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The anchor suite ran while the dev host showed resets to the edge (runner claim reset 18:03Z, three suite resets in the echopoint tag)."
+  ],
+  "lessons": {
+    "well": [
+      "The dev pgqueue row kept attempts and the last error, which proved the drop.",
+      "The transport-rerun and leak checks in `run_suites.sh` handled the three other resets of the run."
+    ],
+    "wrong": [
+      "The flow modelled one delivery per event and no retry.",
+      "Anchor logs no failed or dropped delivery."
+    ],
+    "lucky": [
+      "The race hit a routine run, not an anchor post-deploy gate, where it would have held prod.",
+      "The dev queue table had not yet pruned the done job."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "`wait-delivered` waits for organization.created and organization.updated (min 1 each) before the clear",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-12",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "flow-suite-testing: wait for every expected event before a step that stops the producer",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-12",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "Anchor event worker logs a warning per failed attempt and per event dropped for a missing target",
+      "type": "detect",
+      "owner": "Anchor maintainers",
+      "due": "2026-11-26",
+      "status": "open",
+      "fixes": [
+        "R4"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Decide (ADR) whether a cleared endpoint drops events queued while it was subscribed",
+      "type": "process",
+      "owner": "Anchor maintainers",
+      "due": "2026-11-26",
+      "status": "open",
+      "fixes": [
+        "R3"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "Find why 1340p's path to the Cloudflare edge resets connections (existing gate-reset action)",
+      "type": "mitigate",
+      "owner": "Infra maintainers",
+      "due": "2026-11-26",
+      "status": "open",
+      "fixes": [
+        "R2"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigation",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Anchor suite red on product event delivery: a retried organization.created landed after the flow cleared the endpoint and Anchor dropped it. Flow fixed (waits for both events), green 3x. Dev only."
+  },
+  "links": [
+    {
+      "label": "anchor: product event delivery, prod CI org flow f809a9a2-c534-40c4-93f7-f200df06f6a2",
+      "url": "https://github.com/nanostack-dev/anchor/blob/main/apps/anchor/internal/events/worker.go"
+    },
+    {
+      "label": "Atelier",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1d107-3aae-7d11-8e96-144e453b8339"
+    }
+  ]
+}
