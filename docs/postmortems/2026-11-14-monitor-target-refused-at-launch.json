@@ -1,0 +1,283 @@
+{
+  "title": "Daily monitor skipped a flow twice: its email wait outlasted the monitor's run timeout",
+  "short": "Monitor launch refusal",
+  "service": "echopoint flow suite (prod CI org, dev APIs)",
+  "date": "2026-11-14",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (grafana-watch)"
+  ],
+  "summary": "The Cloud monitor `Daily echopoint` (run timeout 300 s) refused to launch the dogfood flow `Failure alert email` on 2026-11-13 and 2026-11-14 at 09:00Z, because the flow's `alert-email` email wait waited 600 s. Echopoint caps every wait at the run timeout and answered `EMAIL_WAIT_TIMEOUT_TOO_LONG`, so both runs ended `partial` with 62 of 63 flows run. The product behaved as its contract says and emailed the monitor's recipient. The routines missed it for 24 h: a refused launch makes no execution, the suite script read only failed executions, and the log scan read only error rows while the refusal logs at warn. The wait is now 240 s, and the suite script reports launch refusals and waits longer than any monitor's timeout.",
+  "impact": {
+    "text": "No customer impact. The dogfood check that a failing monitor run emails its recipient did not run on the Cloud Daily monitor for two days. It still ran on the CLI gate and on the self-hosted monitor, which passed.",
+    "numbers": [
+      {
+        "value": "2",
+        "label": "partial Daily echopoint runs"
+      },
+      {
+        "value": "1 of 63",
+        "label": "flows refused per run"
+      },
+      {
+        "value": "0",
+        "label": "customer orgs affected"
+      }
+    ]
+  },
+  "trigger": "At 2026-11-13T09:00:04Z the `Daily echopoint` schedule launched `Failure alert email` with the monitor's 300 s timeout; launch refused its 600 s email wait.",
+  "detection": "The grafana-watch run of 2026-11-14T09:01Z read warn rows in prod and found `scheduled flow failed to launch` from `flowschedules/cron.go:455`. The product emailed the monitor's human recipient at 09:04Z on both days, but no routine reads that mailbox, and the 2026-11-13T09:01Z log scan read only error and fatal rows.",
+  "resolution": "The flow's `alert-email` wait is now 240 s (runs take about 15 s). The flow has no published version, so the monitor runs this draft. The next scheduled run (2026-11-15T09:00Z) confirms it.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-12T09:00:00Z",
+        "kind": "note",
+        "label": "Daily echopoint run succeeds with 60 flows",
+        "detail": "Monitor run `8d6b942b`, status `succeeded`, no `launch_failures`."
+      },
+      {
+        "t": "2026-11-12T18:49:36Z",
+        "kind": "change",
+        "label": "Flow `Failure alert email` created, tag `echopoint`",
+        "detail": "Flow `188425dc`, created by another session. Its `alert-email` email wait has `timeout_ms: 600000`. The tag enrols it in `Daily echopoint` (timeout 300 s) and the self-hosted monitor (3600 s)."
+      },
+      {
+        "t": "2026-11-13T00:13:00Z",
+        "kind": "note",
+        "label": "CLI runs of the flow pass in about 15 s",
+        "detail": "24 executions on ephemeral (CLI, gate) and self_hosted runners, all `completed`. These callers launch without a 300 s cap.",
+        "approx": true
+      },
+      {
+        "t": "2026-11-13T09:00:04Z",
+        "kind": "trigger",
+        "label": "Daily echopoint refuses the flow at launch",
+        "detail": "Run `6e56d82b` ends `partial`, `launch_failures`: `An email wait timeout must not exceed 5m0s.` Logged at warn as `scheduled flow failed to launch`."
+      },
+      {
+        "t": "2026-11-13T09:01:00Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Log scan reads error rows only; finds none",
+        "detail": "grafana-watch run 2026-11-13T09:01Z: \"3 error rows, no postmortem\". The warn row at 09:00:04Z was inside its window."
+      },
+      {
+        "t": "2026-11-13T09:04:12Z",
+        "kind": "comms",
+        "label": "Product emails the monitor's recipient",
+        "detail": "`scheduled-run failure alert evaluated`, `failed_flows: 1`, `sent: 1`. The recipient is a human inbox that no routine reads."
+      },
+      {
+        "t": "2026-11-14T09:00:04Z",
+        "kind": "note",
+        "label": "Second refusal, run `26974a08` partial",
+        "detail": "63 flows matched, the same launch failure. Alert email sent again at 09:03:36Z."
+      },
+      {
+        "t": "2026-11-14T09:02:00Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "Log scan reads prod warns and finds the refusal",
+        "detail": "grafana-watch: `scheduled flow failed to launch` x2 since 2026-11-13, `error`: `An email wait timeout must not exceed 5m0s.`"
+      },
+      {
+        "t": "2026-11-14T09:07:40Z",
+        "kind": "mitigate",
+        "label": "Email wait lowered from 600 s to 240 s",
+        "detail": "`flow update` on `188425dc`; 18 nodes kept, `updated_at` 09:07:40Z. Backup export kept beside the suite script."
+      },
+      {
+        "t": "2026-11-14T09:07:41Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "The flow fits the 300 s monitor again",
+        "detail": "240 000 ms is below the 300 s ceiling. The next scheduled run at 2026-11-15T09:00Z verifies it."
+      },
+      {
+        "t": "2026-11-14T09:30:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "Suite script reports refusals and over-long waits",
+        "detail": "`run_suites.sh` prints `MONITOR-LAUNCH-REFUSED` from monitor runs and `WAIT-OVER-MONITOR-TIMEOUT` per monitor tag. Mutation copy with 600 s flagged."
+      }
+    ]
+  },
+  "whys": {
+    "problem": "The Daily echopoint monitor skipped the `Failure alert email` flow on two daily runs",
+    "because": [
+      {
+        "text": "Launch refused the flow with 400 `EMAIL_WAIT_TIMEOUT_TOO_LONG`",
+        "evidence": "Monitor runs `6e56d82b` and `26974a08`: `launch_failures` `An email wait timeout must not exceed 5m0s.`; log `scheduled flow failed to launch` at `flowschedules/cron.go:455`",
+        "because": [
+          {
+            "text": "The flow's email wait waits 600 s, and launch caps each wait at the run timeout, here the monitor's 300 s",
+            "evidence": "Flow `188425dc` node `alert-email` `timeout_ms: 600000`; monitor `1d02b3cf` `timeout_seconds: 300`; echopoint `internal/feature/executions/wait_launch.go` `validateWaitNodes` at 9264c31b",
+            "because": [
+              {
+                "text": "The flow was proven only on callers without a 300 s cap: the CLI gate and the 3600 s self-hosted monitor",
+                "evidence": "24 executions, all ephemeral or self_hosted, all `completed`, about 15 s each",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "A tag enrols a flow in every monitor that selects it, and nothing compares the flow's waits with those monitors' run timeouts"
+                  }
+                ]
+              },
+              {
+                "text": "The author picked a generous wait; the skill asks for a bounded wait but not for one that fits every caller's run timeout",
+                "evidence": "flow-suite-testing SKILL.md, section `Verify external effects and emitted events`: \"Use a bounded wait for asynchronous effects\"",
+                "because": [
+                  {
+                    "id": "R2",
+                    "root": true,
+                    "text": "The flow-suite-testing skill does not say that a wait must fit the shortest run timeout among the flow's callers"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The second run failed the same way: the first refusal went unnoticed for 24 h",
+        "evidence": "Refusals at 2026-11-13T09:00:04Z and 2026-11-14T09:00:04Z; first routine finding 2026-11-14T09:02Z",
+        "because": [
+          {
+            "text": "A refused launch creates no execution, and the suite script lists only failed scheduled executions",
+            "evidence": "`run_suites.sh` `MONITOR-FAILED` block queries `/executions?status=failed&trigger_type=scheduled`; the monitor run records refusals in `launch_failures` instead",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "The suite script did not read monitor runs, so a `partial` run with launch failures was invisible to it"
+              }
+            ]
+          },
+          {
+            "text": "The API logs the refusal at warn, and the log scan read only error and fatal rows",
+            "evidence": "Row `scheduled flow failed to launch` `severity_text: warn`; grafana-watch procedure step 1 filters `severity_text:in(error,fatal)`; the 2026-11-13T09:01Z run had the row in its window",
+            "because": [
+              {
+                "id": "R4",
+                "root": true,
+                "text": "The log scan had no list of warn messages that mean a scheduled job did not run"
+              }
+            ]
+          },
+          {
+            "text": "The product's alert email reached a human inbox, not the routines",
+            "evidence": "`scheduled-run failure alert evaluated` `sent: 1` at 2026-11-13T09:04:12Z and 2026-11-14T09:03:36Z; monitor `recipient_emails` holds one human address",
+            "because": [
+              {
+                "id": "R5",
+                "root": true,
+                "text": "The dogfood monitors alert a person, while the routines that own triage depend on their own scans"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "A warn level is right for a customer's misconfigured monitor (a caller's 4xx), so raising the level would make customer misconfigurations look like platform errors.",
+    "The flow joined the `echopoint` tag the evening before; the Cloud monitor is the only caller with a 300 s cap, and it runs once a day."
+  ],
+  "lessons": {
+    "well": [
+      "Echopoint recorded the refusal with its reason on the monitor run and emailed the recipient, so the cause was clear in one lookup.",
+      "The other 62 flows ran; a refusal is per flow, not per run.",
+      "The flow passed on two other callers, so the check it holds was never lost."
+    ],
+    "wrong": [
+      "Two routines watched this org and neither read monitor runs or warn rows.",
+      "The flow went live with a wait 40 times longer than its run needs."
+    ],
+    "lucky": [
+      "The refused flow tests alert email, which the self-hosted monitor and the gate still covered. A refused security flow would have left a gap no other caller covers.",
+      "Only one flow had an over-long wait. The new check found no other among every monitored tag."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Lower the `alert-email` wait of `Failure alert email` to 240 s",
+      "type": "mitigate",
+      "owner": "Nanostack routine (grafana-watch)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": []
+    },
+    {
+      "id": "A2",
+      "what": "`run_suites.sh` prints `WAIT-OVER-MONITOR-TIMEOUT` for each wait longer than the timeout of a monitor that selects the flow",
+      "type": "prevent",
+      "owner": "Nanostack routine (grafana-watch)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "`run_suites.sh` prints `MONITOR-LAUNCH-REFUSED` from every monitor run of the last 24 h",
+      "type": "detect",
+      "owner": "Nanostack routine (grafana-watch)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R3",
+        "R5"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "flow-suite-testing skill: a wait fits the shortest run timeout among the flow's callers; read monitor runs' launch failures",
+      "type": "process",
+      "owner": "Nanostack routine (grafana-watch)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R2",
+        "R3"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "grafana-watch procedure: treat prod warn `scheduled flow failed to launch` as an error pattern",
+      "type": "detect",
+      "owner": "Nanostack routine (grafana-watch)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R4",
+        "R5"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Detection and fix",
+      "name": "Nanostack routine (grafana-watch)"
+    }
+  ],
+  "messaging": {
+    "internal": "The Cloud Daily echopoint monitor refused `Failure alert email` on 2026-11-13 and 2026-11-14: its 600 s email wait exceeded the monitor's 300 s run timeout. Wait lowered to 240 s; the suite script now reports launch refusals and waits longer than a monitor's timeout.",
+    "external": "None: the CI organization runs dogfood flows against dev; no customer was affected."
+  },
+  "links": [
+    {
+      "label": "Atelier",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1d956-1e4b-7e56-8e3c-11639f255b75"
+    },
+    {
+      "label": "echopoint wait_launch.go at 9264c31b",
+      "url": "https://github.com/nanostack-dev/echopoint/blob/9264c31b674e9ba2a6a52205a16cf58483227958/internal/feature/executions/wait_launch.go"
+    }
+  ]
+}
