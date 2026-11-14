@@ -111,6 +111,10 @@ authorization requirements.
    Put the rerun and the leak report in every caller of the suite, the deploy gate
    first: a fix in one script leaves the gate that holds prod without it
    ([gate resets](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-05-gate-transport-resets.md)).
+   Keep one list of sample transport messages (a reset SSE stream of a child-run wait
+   included) and test every caller's classifier against it; a class added to one
+   caller goes into the others and the list the same day
+   ([SSE reset](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-13-gate-sse-reset-not-transport.md)).
    The callers are the local CLI script, the deploy gate and the scheduled monitors;
    a monitor reruns nothing, so read each failed scheduled run's node results for a
    transport error and uncompleted cleanups
