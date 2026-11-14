@@ -195,7 +195,11 @@
       "status": "done",
       "fixes": [
         "R2"
-      ]
+      ],
+      "ticket": {
+        "label": "skills#63",
+        "url": "https://github.com/nanostack-dev/skills/pull/63"
+      }
     },
     {
       "id": "A4",
@@ -231,6 +235,10 @@
     {
       "label": "echopoint#675 (Anchor decides every request)",
       "url": "https://github.com/nanostack-dev/echopoint/pull/675"
+    },
+    {
+      "label": "skills#63",
+      "url": "https://github.com/nanostack-dev/skills/pull/63"
     }
   ]
 }
