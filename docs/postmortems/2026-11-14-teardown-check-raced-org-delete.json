@@ -1,0 +1,236 @@
+{
+  "title": "Monitor run red: a removal check raced the delete of the org whose key it used",
+  "short": "Teardown check race",
+  "service": "echopoint flow suite (prod CI org, dev APIs)",
+  "date": "2026-11-14",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The first run of a new self-hosted monitor failed `Workspace isolation` on node `cleanup-flow-gone`: it expected 404 and got 401. The node reads flow A with the run's throwaway org key, and it started in the same second as `cleanup-org`, which deletes that org and its keys. No edge ordered the two, so the delete won and Echopoint's per-request access decision refused the key. The race had passed 97 earlier runs on the CLI and Cloud runners. The flow now runs the check before the org delete, and the routine audits every flow for a node that reads with a credential a parallel node deletes.",
+  "impact": {
+    "text": "No customer impact. One scheduled run of the dogfood suite went red on dev; the product behaved as its contract says. Every cleanup completed, so nothing leaked.",
+    "numbers": [
+      {
+        "value": "1",
+        "label": "red monitor run (of 97 earlier green runs)"
+      },
+      {
+        "value": "0",
+        "label": "leaked resources"
+      },
+      {
+        "value": "1",
+        "label": "flow with the race (of 123 audited)"
+      }
+    ]
+  },
+  "trigger": "At 02:47:37Z the self-hosted runner started `cleanup-flow-gone` and `cleanup-org` together; the org delete finished first and the check's org key answered 401.",
+  "detection": "The routine's suite script lists failed monitor runs of the last 24 h and printed `MONITOR-FAILED` at its 06:08Z run. Monitors rerun nothing and alert nobody in this org, so the 3.5 h delay is the routine's cadence.",
+  "resolution": "An edge `cleanup-flow-gone → cleanup-org` orders the check before the delete (live flow and generator). Three serial runs and two echopoint tag runs passed. `run_suites.sh` now runs `audit_teardown_race.py` on every flow and prints `TEARDOWN-RACE`.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-01T18:00:00Z",
+        "approx": true,
+        "kind": "change",
+        "label": "Isolation flow created; check and org delete are siblings",
+        "detail": "`gen_workspace_isolation.py`: `chain(cleanup-flow-a, cleanup-flow-gone)` and the owned cleanups → `cleanup-org`, with no edge between the check and the delete."
+      },
+      {
+        "t": "2026-11-14T02:34:50Z",
+        "kind": "change",
+        "label": "Monitor 7e46c872 created (self_hosted, tag echopoint)",
+        "detail": "`Daily echopoint, all suites (self-hosted)`, cron `42 2 * * *`, tags echopoint/integration/license-limits; created by another session."
+      },
+      {
+        "t": "2026-11-14T02:42:04Z",
+        "kind": "note",
+        "label": "First monitor run starts (execution 01a1d7ee)"
+      },
+      {
+        "t": "2026-11-14T02:47:37Z",
+        "kind": "trigger",
+        "label": "cleanup-org and cleanup-flow-gone start together; check gets 401",
+        "detail": "`cleanup-org` 339 ms, `cleanup-flow-gone` 383 ms, both started 02:47:37Z; assertion `status_code equals 404`, actual 401."
+      },
+      {
+        "t": "2026-11-14T06:19:00Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "run_suites.sh prints MONITOR-FAILED for 174cb56e"
+      },
+      {
+        "t": "2026-11-14T06:21:27Z",
+        "kind": "mitigate",
+        "label": "Edge cleanup-flow-gone → cleanup-org added to the live flow"
+      },
+      {
+        "t": "2026-11-14T06:23:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Three serial runs green"
+      },
+      {
+        "t": "2026-11-14T06:40:00Z",
+        "approx": true,
+        "kind": "followup",
+        "label": "Teardown audit in run_suites.sh; skill lesson"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "A scheduled run of the echopoint dogfood suite went red on `Workspace isolation`",
+    "because": [
+      {
+        "text": "`cleanup-flow-gone` got 401 instead of 404 on `GET /flows/{A}`",
+        "evidence": "Execution 01a1d7ee node `cleanup-flow-gone`: `assertion 1 failed: status_code equals expected=404 actual=401`",
+        "because": [
+          {
+            "text": "The org whose key the check sends was already deleted, so Anchor's per-request decision refused the key",
+            "evidence": "`cleanup-org` and `cleanup-flow-gone` both started 02:47:37Z; delete 339 ms, check 383 ms; echopoint#675 asks Anchor on every request",
+            "because": [
+              {
+                "text": "The flow has no edge between the check and the org delete: both wait only on the owned cleanups",
+                "evidence": "Flow 174cb56e edges: `cleanup-flow-a → cleanup-flow-gone`, `cleanup-flow-a → cleanup-org`; `gen_workspace_isolation.py` lines 184-185",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "Cleanup order is hand-written per flow, and nothing checks that a node reading with a run credential precedes the delete of that credential"
+                  },
+                  {
+                    "id": "R2",
+                    "root": true,
+                    "text": "The flow-suite-testing skill draws `cleanup → verify removal` but says nothing about which credential the verify step may use"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "97 earlier runs passed, so the race stayed hidden for 13 days",
+        "evidence": "Executions of 174cb56e: 91 CLI ephemeral + 6 Cloud scheduled completed; the first self-hosted run failed",
+        "because": [
+          {
+            "text": "A new monitor ran the flow on the self-hosted runner, where the delete happened to finish first",
+            "evidence": "Monitor 7e46c872 created 02:34:50Z, runner_type self_hosted",
+            "because": [
+              {
+                "id": "R3",
+                "root": true,
+                "text": "New and reshaped flows are soaked on one runner type only, so a timing race passes until another runner runs it"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The red run stayed red and nobody saw it for 3.5 h",
+        "because": [
+          {
+            "text": "A monitor reruns nothing, and its failures reach only the monitor history the routine reads four times a day",
+            "because": [
+              {
+                "id": "R4",
+                "root": true,
+                "text": "Monitors have no rerun or alert path for a failed suite run (open action of the 2026-11-08 monitor transport postmortem)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contributing": [
+    "The new monitor duplicates the Cloud `Daily echopoint` tag on another runner type, so every flow now runs on three runner types."
+  ],
+  "lessons": {
+    "well": [
+      "`MONITOR-FAILED` in the suite script surfaced the run without anyone reading monitor history.",
+      "The run's `always` cleanups all completed, so the throwaway org and flows were gone."
+    ],
+    "wrong": [
+      "A 3-run soak on the CLI runner was taken as proof of a flow whose correctness depended on node timing."
+    ],
+    "lucky": [
+      "The node that lost the race was a read. A cleanup DELETE with the org key in the same place would have left flow A in Echopoint's database: deleting the Anchor org does not remove Echopoint rows.",
+      "The race fired on a monitor run, not in a post-deploy gate, where it would have held prod."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Order `cleanup-flow-gone` before `cleanup-org` in the live flow and in `gen_workspace_isolation.py`",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`audit_teardown_race.py` in `run_suites.sh`: print `TEARDOWN-RACE` for any node that reads with an org or key a parallel node deletes",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R1",
+        "R3"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "flow-suite-testing skill: a removal check that uses a credential the teardown deletes runs before that delete",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-14",
+      "status": "done",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A4",
+      "what": "Give monitors a rerun or alert path for a failed suite run (carried over from the 2026-11-08 monitor transport postmortem A2)",
+      "type": "mitigate",
+      "owner": "echopoint maintainers",
+      "due": "2026-11-22",
+      "status": "open",
+      "ticket": {
+        "label": "2026-11-08 postmortem",
+        "url": "http://nanostack-dev-1340p:4320/postmortems/01a1bb20-3f32-79f6-a37d-48272301c765"
+      },
+      "fixes": [
+        "R4"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigation",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "The first self-hosted monitor run failed `Workspace isolation`: a removal check raced the delete of the org whose key it used. Flow ordered, every flow audited (one race found), audit added to the suite script.",
+    "external": "None: dev and CI only."
+  },
+  "links": [
+    {
+      "label": "Atelier",
+      "url": "http://nanostack-dev-1340p:4320/postmortems/01a1d8bb-f60a-709b-bdd5-88e3314338d5"
+    },
+    {
+      "label": "echopoint#675 (Anchor decides every request)",
+      "url": "https://github.com/nanostack-dev/echopoint/pull/675"
+    }
+  ]
+}
