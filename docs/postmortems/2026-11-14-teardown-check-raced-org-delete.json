@@ -8,13 +8,13 @@
   "authors": [
     "Nanostack routine (echopoint-investigation)"
   ],
-  "summary": "The first run of a new self-hosted monitor failed `Workspace isolation` on node `cleanup-flow-gone`: it expected 404 and got 401. The node reads flow A with the run's throwaway org key, and it started in the same second as `cleanup-org`, which deletes that org and its keys. No edge ordered the two, so the delete won and Echopoint's per-request access decision refused the key. The race had passed 97 earlier runs on the CLI and Cloud runners. The flow now runs the check before the org delete, and the routine audits every flow for a node that reads with a credential a parallel node deletes.",
+  "summary": "The first run of a new self-hosted monitor failed `Workspace isolation` on node `cleanup-flow-gone`: it expected 404 and got 401. The node reads flow A with the run's throwaway org key, and it started in the same second as `cleanup-org`, which deletes that org and its keys. No edge ordered the two, so the delete won and Echopoint's per-request access decision refused the key. The race had passed 189 earlier runs on the CLI and Cloud runners. The flow now runs the check before the org delete, and the routine audits every flow for a node that reads with a credential a parallel node deletes.",
   "impact": {
     "text": "No customer impact. One scheduled run of the dogfood suite went red on dev; the product behaved as its contract says. Every cleanup completed, so nothing leaked.",
     "numbers": [
       {
         "value": "1",
-        "label": "red monitor run (of 97 earlier green runs)"
+        "label": "red monitor run (after 189 green CLI/Cloud runs)"
       },
       {
         "value": "0",
@@ -27,15 +27,15 @@
     ]
   },
   "trigger": "At 02:47:37Z the self-hosted runner started `cleanup-flow-gone` and `cleanup-org` together; the org delete finished first and the check's org key answered 401.",
-  "detection": "The routine's suite script lists failed monitor runs of the last 24 h and printed `MONITOR-FAILED` at its 06:08Z run. Monitors rerun nothing and alert nobody in this org, so the 3.5 h delay is the routine's cadence.",
-  "resolution": "An edge `cleanup-flow-gone → cleanup-org` orders the check before the delete (live flow and generator). Three serial runs and two echopoint tag runs passed. `run_suites.sh` now runs `audit_teardown_race.py` on every flow and prints `TEARDOWN-RACE`.",
+  "detection": "The routine's suite script lists failed monitor runs of the last 24 h and printed `MONITOR-FAILED` at its 06:08Z run. The new monitor has no recipient emails and monitors rerun nothing, so the 3.5 h delay is the routine's cadence.",
+  "resolution": "An edge `cleanup-flow-gone → cleanup-org` orders the check before the delete (live flow and generator). Three serial runs and two echopoint tag runs passed. A mutation copy with the check forced to fail still completed `cleanup-org` and `cleanup-product-key`, so the new edge never holds the teardown. `run_suites.sh` now runs `audit_teardown_race.py` on every flow and prints `TEARDOWN-RACE`.",
   "timeline": {
     "events": [
       {
-        "t": "2026-11-01T18:00:00Z",
-        "approx": true,
+        "t": "2026-11-01T05:11:18Z",
+        "approx": false,
         "kind": "change",
-        "label": "Isolation flow created; check and org delete are siblings",
+        "label": "Isolation flow first runs; check and org delete are siblings",
         "detail": "`gen_workspace_isolation.py`: `chain(cleanup-flow-a, cleanup-flow-gone)` and the owned cleanups → `cleanup-org`, with no edge between the check and the delete."
       },
       {
@@ -112,8 +112,8 @@
         ]
       },
       {
-        "text": "97 earlier runs passed, so the race stayed hidden for 13 days",
-        "evidence": "Executions of 174cb56e: 91 CLI ephemeral + 6 Cloud scheduled completed; the first self-hosted run failed",
+        "text": "189 earlier runs passed, so the race stayed hidden for 13 days",
+        "evidence": "Executions of 174cb56e before 02:42Z: 179 CLI ephemeral + 10 Cloud scheduled completed; the only other failures were two 502s in the 2026-11-09 dev stall",
         "because": [
           {
             "text": "A new monitor ran the flow on the self-hosted runner, where the delete happened to finish first",
@@ -133,14 +133,15 @@
         "text": "The red run stayed red and nobody saw it for 3.5 h",
         "because": [
           {
-            "text": "A monitor reruns nothing, and its failures reach only the monitor history the routine reads four times a day",
+            "text": "Monitors rerun nothing, and monitor 7e46c872 has no recipient emails, so only the routine's 6-hourly read saw it",
             "because": [
               {
                 "id": "R4",
                 "root": true,
-                "text": "Monitors have no rerun or alert path for a failed suite run (open action of the 2026-11-08 monitor transport postmortem)"
+                "text": "A monitor can run with no rerun and no recipients, so a red run waits for whoever next reads its history"
               }
-            ]
+            ],
+            "evidence": "`GET /monitors/7e46c872…`: `recipient_emails` empty"
           }
         ]
       }
@@ -152,7 +153,8 @@
   "lessons": {
     "well": [
       "`MONITOR-FAILED` in the suite script surfaced the run without anyone reading monitor history.",
-      "The run's `always` cleanups all completed, so the throwaway org and flows were gone."
+      "The run's `always` cleanups all completed, so the throwaway org and flows were gone.",
+      "A mutation copy proved the teardown still runs when the reordered check fails."
     ],
     "wrong": [
       "A 3-run soak on the CLI runner was taken as proof of a flow whose correctness depended on node timing."
@@ -212,6 +214,17 @@
         "label": "2026-11-08 postmortem",
         "url": "http://nanostack-dev-1340p:4320/postmortems/01a1bb20-3f32-79f6-a37d-48272301c765"
       },
+      "fixes": [
+        "R4"
+      ]
+    },
+    {
+      "id": "A5",
+      "what": "Give monitor 7e46c872 recipient emails (or retire it if the Cloud `Daily echopoint` covers it)",
+      "type": "detect",
+      "owner": "CI org owners",
+      "due": "2026-11-21",
+      "status": "open",
       "fixes": [
         "R4"
       ]

@@ -15,13 +15,13 @@
 
 ## Summary
 
-The first run of a new self-hosted monitor failed `Workspace isolation` on node `cleanup-flow-gone`: it expected 404 and got 401. The node reads flow A with the run's throwaway org key, and it started in the same second as `cleanup-org`, which deletes that org and its keys. No edge ordered the two, so the delete won and Echopoint's per-request access decision refused the key. The race had passed 97 earlier runs on the CLI and Cloud runners. The flow now runs the check before the org delete, and the routine audits every flow for a node that reads with a credential a parallel node deletes.
+The first run of a new self-hosted monitor failed `Workspace isolation` on node `cleanup-flow-gone`: it expected 404 and got 401. The node reads flow A with the run's throwaway org key, and it started in the same second as `cleanup-org`, which deletes that org and its keys. No edge ordered the two, so the delete won and Echopoint's per-request access decision refused the key. The race had passed 189 earlier runs on the CLI and Cloud runners. The flow now runs the check before the org delete, and the routine audits every flow for a node that reads with a credential a parallel node deletes.
 
 ## Impact
 
 No customer impact. One scheduled run of the dogfood suite went red on dev; the product behaved as its contract says. Every cleanup completed, so nothing leaked.
 
-- **1** red monitor run (of 97 earlier green runs)
+- **1** red monitor run (after 189 green CLI/Cloud runs)
 - **0** leaked resources
 - **1** flow with the race (of 123 audited)
 
@@ -31,17 +31,17 @@ At 02:47:37Z the self-hosted runner started `cleanup-flow-gone` and `cleanup-org
 
 ## Detection
 
-The routine's suite script lists failed monitor runs of the last 24 h and printed `MONITOR-FAILED` at its 06:08Z run. Monitors rerun nothing and alert nobody in this org, so the 3.5 h delay is the routine's cadence.
+The routine's suite script lists failed monitor runs of the last 24 h and printed `MONITOR-FAILED` at its 06:08Z run. The new monitor has no recipient emails and monitors rerun nothing, so the 3.5 h delay is the routine's cadence.
 
 ## Resolution
 
-An edge `cleanup-flow-gone → cleanup-org` orders the check before the delete (live flow and generator). Three serial runs and two echopoint tag runs passed. `run_suites.sh` now runs `audit_teardown_race.py` on every flow and prints `TEARDOWN-RACE`.
+An edge `cleanup-flow-gone → cleanup-org` orders the check before the delete (live flow and generator). Three serial runs and two echopoint tag runs passed. A mutation copy with the check forced to fail still completed `cleanup-org` and `cleanup-product-key`, so the new edge never holds the teardown. `run_suites.sh` now runs `audit_teardown_race.py` on every flow and prints `TEARDOWN-RACE`.
 
 ## Timeline (UTC)
 
 | Time | | Event |
 |---|---|---|
-| ~18:00 | T−12d 08h | **Isolation flow created; check and org delete are siblings** `gen_workspace_isolation.py`: `chain(cleanup-flow-a, cleanup-flow-gone)` and the owned cleanups → `cleanup-org`, with no edge between the check and the delete. |
+| 05:11:18 | T−12d 21h | **Isolation flow first runs; check and org delete are siblings** `gen_workspace_isolation.py`: `chain(cleanup-flow-a, cleanup-flow-gone)` and the owned cleanups → `cleanup-org`, with no edge between the check and the delete. |
 | 02:34:50 | T−12m 47s | **Monitor 7e46c872 created (self_hosted, tag echopoint)** `Daily echopoint, all suites (self-hosted)`, cron `42 2 * * *`, tags echopoint/integration/license-limits; created by another session. |
 | 02:42:04 | T−5m 33s | **First monitor run starts (execution 01a1d7ee)** |
 | 02:47:37 | T+0s | **cleanup-org and cleanup-flow-gone start together; check gets 401** `cleanup-org` 339 ms, `cleanup-flow-gone` 383 ms, both started 02:47:37Z; assertion `status_code equals 404`, actual 401. |
@@ -62,12 +62,12 @@ flowchart TD
   W3["The flow has no edge between the check and the org delete: both wait only on the owned cleanups"]
   R1["R1 · Cleanup order is hand-written per flow, and nothing checks that a node reading with a run credential precedes the delete of that credential"]
   R2["R2 · The flow-suite-testing skill draws `cleanup → verify removal` but says nothing about which credential the verify step may use"]
-  W4["97 earlier runs passed, so the race stayed hidden for 13 days"]
+  W4["189 earlier runs passed, so the race stayed hidden for 13 days"]
   W5["A new monitor ran the flow on the self-hosted runner, where the delete happened to finish first"]
   R3["R3 · New and reshaped flows are soaked on one runner type only, so a timing race passes until another runner runs it"]
   W6["The red run stayed red and nobody saw it for 3.5 h"]
-  W7["A monitor reruns nothing, and its failures reach only the monitor history the routine reads four times a day"]
-  R4["R4 · Monitors have no rerun or alert path for a failed suite run (open action of the 2026-11-08 monitor transport postmortem)"]
+  W7["Monitors rerun nothing, and monitor 7e46c872 has no recipient emails, so only the routine's 6-hourly read saw it"]
+  R4["R4 · A monitor can run with no rerun and no recipients, so a red run waits for whoever next reads its history"]
   P -->|why?| W1
   W1 -->|why?| W2
   W2 -->|why?| W3
@@ -92,19 +92,19 @@ flowchart TD
       - **Why?** The flow has no edge between the check and the org delete: both wait only on the owned cleanups _Evidence: Flow 174cb56e edges: `cleanup-flow-a → cleanup-flow-gone`, `cleanup-flow-a → cleanup-org`; `gen_workspace_isolation.py` lines 184-185_
         - **Why?** Cleanup order is hand-written per flow, and nothing checks that a node reading with a run credential precedes the delete of that credential → **Root cause R1** (fixed by A1, A2)
         - **Why?** The flow-suite-testing skill draws `cleanup → verify removal` but says nothing about which credential the verify step may use → **Root cause R2** (fixed by A3)
-  - **Why?** 97 earlier runs passed, so the race stayed hidden for 13 days _Evidence: Executions of 174cb56e: 91 CLI ephemeral + 6 Cloud scheduled completed; the first self-hosted run failed_
+  - **Why?** 189 earlier runs passed, so the race stayed hidden for 13 days _Evidence: Executions of 174cb56e before 02:42Z: 179 CLI ephemeral + 10 Cloud scheduled completed; the only other failures were two 502s in the 2026-11-09 dev stall_
     - **Why?** A new monitor ran the flow on the self-hosted runner, where the delete happened to finish first _Evidence: Monitor 7e46c872 created 02:34:50Z, runner_type self_hosted_
       - **Why?** New and reshaped flows are soaked on one runner type only, so a timing race passes until another runner runs it → **Root cause R3** (fixed by A2)
   - **Why so bad?** The red run stayed red and nobody saw it for 3.5 h
-    - **Why?** A monitor reruns nothing, and its failures reach only the monitor history the routine reads four times a day
-      - **Why?** Monitors have no rerun or alert path for a failed suite run (open action of the 2026-11-08 monitor transport postmortem) → **Root cause R4** (fixed by A4)
+    - **Why?** Monitors rerun nothing, and monitor 7e46c872 has no recipient emails, so only the routine's 6-hourly read saw it _Evidence: `GET /monitors/7e46c872…`: `recipient_emails` empty_
+      - **Why?** A monitor can run with no rerun and no recipients, so a red run waits for whoever next reads its history → **Root cause R4** (fixed by A4, A5)
 
 ## Root causes
 
 - **R1** Cleanup order is hand-written per flow, and nothing checks that a node reading with a run credential precedes the delete of that credential
 - **R2** The flow-suite-testing skill draws `cleanup → verify removal` but says nothing about which credential the verify step may use
 - **R3** New and reshaped flows are soaked on one runner type only, so a timing race passes until another runner runs it
-- **R4** Monitors have no rerun or alert path for a failed suite run (open action of the 2026-11-08 monitor transport postmortem)
+- **R4** A monitor can run with no rerun and no recipients, so a red run waits for whoever next reads its history
 
 ## Contributing factors
 
@@ -116,6 +116,7 @@ flowchart TD
 
 - `MONITOR-FAILED` in the suite script surfaced the run without anyone reading monitor history.
 - The run's `always` cleanups all completed, so the throwaway org and flows were gone.
+- A mutation copy proved the teardown still runs when the reordered check fails.
 
 ### What went wrong
 
@@ -134,6 +135,7 @@ flowchart TD
 | A2 | `audit_teardown_race.py` in `run_suites.sh`: print `TEARDOWN-RACE` for any node that reads with an org or key a parallel node deletes | detect | Nanostack routine (echopoint-investigation) | 2026-11-14 | done |  | R1, R3 |
 | A3 | flow-suite-testing skill: a removal check that uses a credential the teardown deletes runs before that delete | process | Nanostack routine (echopoint-investigation) | 2026-11-14 | done | [skills#63](https://github.com/nanostack-dev/skills/pull/63) | R2 |
 | A4 | Give monitors a rerun or alert path for a failed suite run (carried over from the 2026-11-08 monitor transport postmortem A2) | mitigate | echopoint maintainers | 2026-11-22 | open | [2026-11-08 postmortem](http://nanostack-dev-1340p:4320/postmortems/01a1bb20-3f32-79f6-a37d-48272301c765) | R4 |
+| A5 | Give monitor 7e46c872 recipient emails (or retire it if the Cloud `Daily echopoint` covers it) | detect | CI org owners | 2026-11-21 | open |  | R4 |
 
 ## Responders
 
