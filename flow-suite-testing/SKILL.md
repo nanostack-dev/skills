@@ -211,7 +211,12 @@ before deleting their owner when the application's lifecycle requires that order
 Accept already-removed states only where the API contract makes them safe.
 
 Verify removal through supported read-back or listing APIs and report cleanup
-failure even when assertions passed. Reusing one generated idempotency key across
+failure even when assertions passed. Order each removal check before the delete
+of any credential it authenticates with (the run's organization or its key):
+started beside that delete, the check can lose the race and answer 401 on one
+runner while passing on another
+([teardown race](../docs/postmortems/2026-11-14-teardown-check-raced-org-delete.md)).
+Reusing one generated idempotency key across
 a request and its replay should leave the expected single effect; generating a
 different key for each request tests two creations instead.
 
