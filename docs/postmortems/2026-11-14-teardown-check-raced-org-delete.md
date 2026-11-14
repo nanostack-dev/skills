@@ -132,7 +132,7 @@ flowchart TD
 |---|---|---|---|---|---|---|---|
 | A1 | Order `cleanup-flow-gone` before `cleanup-org` in the live flow and in `gen_workspace_isolation.py` | prevent | Nanostack routine (echopoint-investigation) | 2026-11-14 | done |  | R1 |
 | A2 | `audit_teardown_race.py` in `run_suites.sh`: print `TEARDOWN-RACE` for any node that reads with an org or key a parallel node deletes | detect | Nanostack routine (echopoint-investigation) | 2026-11-14 | done |  | R1, R3 |
-| A3 | flow-suite-testing skill: a removal check that uses a credential the teardown deletes runs before that delete | process | Nanostack routine (echopoint-investigation) | 2026-11-14 | done |  | R2 |
+| A3 | flow-suite-testing skill: a removal check that uses a credential the teardown deletes runs before that delete | process | Nanostack routine (echopoint-investigation) | 2026-11-14 | done | [skills#63](https://github.com/nanostack-dev/skills/pull/63) | R2 |
 | A4 | Give monitors a rerun or alert path for a failed suite run (carried over from the 2026-11-08 monitor transport postmortem A2) | mitigate | echopoint maintainers | 2026-11-22 | open | [2026-11-08 postmortem](http://nanostack-dev-1340p:4320/postmortems/01a1bb20-3f32-79f6-a37d-48272301c765) | R4 |
 
 ## Responders
@@ -153,3 +153,4 @@ None: dev and CI only.
 
 - [Atelier](http://nanostack-dev-1340p:4320/postmortems/01a1d8bb-f60a-709b-bdd5-88e3314338d5)
 - [echopoint#675 (Anchor decides every request)](https://github.com/nanostack-dev/echopoint/pull/675)
+- [skills#63](https://github.com/nanostack-dev/skills/pull/63)
