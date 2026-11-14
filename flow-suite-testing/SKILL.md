@@ -256,7 +256,12 @@ universally exempt from another expansion pass.
 An accepted API response proves acceptance. When the feature writes elsewhere,
 read back the affected record through the external system's supported interface
 and assert the resource identity and fields the feature wrote. Use a bounded wait
-for asynchronous effects. Reuse existing request definitions or import a schema
+for asynchronous effects, sized to fit the shortest run timeout among the flow's
+callers (the gate and every scheduled monitor that selects its tags). An engine
+that caps waits at the run timeout refuses the flow at launch; that refusal makes
+no execution, so the suite runner reads it from the monitor run's launch failures
+([monitor launch refusal](../docs/postmortems/2026-11-14-monitor-target-refused-at-launch.md)).
+Reuse existing request definitions or import a schema
 through the project's authorized workflow when supported. Test the integration's
 effect, rather than unrelated behavior of the external system.
 
