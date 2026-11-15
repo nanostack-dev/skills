@@ -131,7 +131,8 @@ def strip_markup(text):
     text = text.replace("\u2019", "'")  # curly apostrophes
     text = re.sub(r"^---\n.*?\n---\n", _blank, text, flags=re.S)  # frontmatter
     text = re.sub(r"```.*?```", _blank, text, flags=re.S)  # code blocks
-    text = re.sub(r"<(script|style|pre|code)\b.*?</\1>", _blank, text, flags=re.S | re.I)
+    text = re.sub(r"<(script|style|pre)\b[^>]*/>", _blank, text, flags=re.I)  # self-closing
+    text = re.sub(r"<(script|style|pre|code)\b[^>]*(?<!/)>.*?</\1>", _blank, text, flags=re.S | re.I)
     text = re.sub(r"<[^>]+>", lambda m: " " + _blank(m), text)  # tags, keep text
     text = re.sub(r"`[^`\n]*`", "", text)
     return text
