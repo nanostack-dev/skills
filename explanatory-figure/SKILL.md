@@ -65,5 +65,3 @@ The figure is complete when:
 - desktop and phone screenshots exist and labels are legible in both;
 - any control works by pointer, touch and keyboard;
 - the caption states what the figure shows, what each mark means and what it simplifies.
-
-The sources behind these rules are in [the research record](../docs/research/2026-11-15-tech-article-sources.md).

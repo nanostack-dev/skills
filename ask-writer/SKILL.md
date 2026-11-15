@@ -27,7 +27,7 @@ A **flow** is a path through the skills. Pick the flow from what the reader will
 3. **`scroll-story`** only when a figure changes state as the reader moves through the text. A static figure with a caption skips this step.
 4. **Wording review**: run [writing-tells](../tech-article/references/writing-tells.md) and its checker on the draft.
 
-Exemplar preference (supplied pieces first, the pre-2023 list after) is set in `tech-article` step 4.
+The order of preference for examples (supplied pieces first) is set in `tech-article` step 4.
 
 ## Docs: tutorial, how-to, reference or explanation
 

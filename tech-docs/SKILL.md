@@ -42,7 +42,7 @@ Done when every sample has been run or marked.
 
 ### 5. Review
 
-Compare the page with a strong example of the same form, in this order of preference: one the user or project supplies, the project's own docs, then the documentation exemplars in [exemplars](../tech-article/references/exemplars.md). Run the checklist at the end of this file, then a cut pass: remove each sentence that can go without loss.
+Compare the page with a strong example of the same form, in this order of preference: one the user or project supplies, the project's own docs, then well-known documentation written by people before 2023. Run the checklist at the end of this file, then a cut pass: remove each sentence that can go without loss.
 
 ## Forms
 
@@ -118,5 +118,3 @@ The page is complete when every check passes:
 10. Each diagram has one message and a caption with the takeaway.
 11. It links to the next step and to related reference or explanation.
 12. The wording passes the review in [writing-tells](../tech-article/references/writing-tells.md) and its checker script.
-
-The sources behind these rules are in [the research record](../docs/research/2026-11-15-tech-article-sources.md).

@@ -1,5 +1,5 @@
 {
-  "corpus": "pre-2023 technical articles (see ../references/exemplars.md)",
+  "corpus": "technical articles written by people before 2023",
   "em_dash_per_10k": 6.91,
   "files": 29,
   "rate_per_10k": {
