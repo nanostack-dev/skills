@@ -45,6 +45,24 @@ https://raw.githubusercontent.com/nanostack-dev/skills/main/<skill-name>/SKILL.m
   action per root cause, published as an animated HTML report plus a Markdown
   document.
 
+- [`tech-article`](tech-article/SKILL.md) — write a technical article that teaches
+  one mechanism: one question and takeaway, a concrete protagonist the reader
+  follows, show-then-name voice, sourced claims and declared simplifications,
+  and a review with figures-only and text-only tests.
+- [`explanatory-figure`](explanatory-figure/SKILL.md) — diagrams that explain:
+  object identity, meaning in space, connectors attached to real relationships,
+  honest copy-versus-move metaphors, data-derived scenes and phone recomposition.
+- [`scroll-story`](scroll-story/SKILL.md) — scroll-driven and interactive
+  explanations: one chapter per state change, reading plateaus, deterministic
+  reversible progress, predict-then-test experiments and reduced motion.
+- [`tech-docs`](tech-docs/SKILL.md) — documentation pages: choose the form
+  (tutorial, how-to, reference, explanation) and reader first, then the form's
+  rules, runnable samples and a page checklist.
+- [`ask-writer`](ask-writer/SKILL.md) — user-invoked router: which writing flow
+  (article, docs, design, incident, figure) and which skills in what order.
+  The shared wording review lives in
+  [writing-tells](tech-article/references/writing-tells.md) with a checker script.
+
 - [`design-change`](design-change/SKILL.md) — researched ADRs and software designs:
   evidence-backed decisions, stable Before/Changes/After entities, service and
   provider flows, pseudocode, natural-language acceptance, and rollout/rollback.
