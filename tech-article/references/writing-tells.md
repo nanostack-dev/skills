@@ -10,7 +10,7 @@ Run the checker for a first pass:
 python3 tech-article/scripts/check_tells.py draft.md
 ```
 
-It reports each hit with its line, and the rate per 10,000 words compared with a corpus of well-known technical articles published before 2023 (see [exemplars](exemplars.md)). Words that those human articles also use often are marked *context*: check the sentence, and keep the word when it carries meaning.
+It reports each hit with its line, and the rate per 10,000 words compared with a baseline measured on technical articles written by people before 2023. Words that those articles also use often are marked *context*: check the sentence, and keep the word when it carries meaning.
 
 ## Words and their plain replacements
 
@@ -141,4 +141,3 @@ Patterns carry more signal than single words. Look for these:
 3. Read the patterns table against the draft once, top to bottom.
 4. Change a hit only when the replacement is clearer. A word from the list that is the precise term (a "key" in a map, a "robust" estimator, "significant" in a statistical sense) stays.
 
-The sources for this list (Wikipedia's "Signs of AI writing", Kobak et al.'s excess-vocabulary study, and the discussions around them) are in [the research record](../../docs/research/2026-11-15-tech-article-sources.md).

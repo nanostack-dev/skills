@@ -58,7 +58,7 @@ Done when every chapter has one idea and one short paragraph, and the parts left
 
 ### 4. Write in the voice
 
-Calibrate on exemplars before drafting, in this order of preference: pieces the user or project supplies; the project's own published articles; the pre-2023 list in [exemplars](references/exemplars.md); general knowledge last. Read two of them for how they open, pace and name things; borrow the approach, never the wording.
+Calibrate on examples before drafting, in this order of preference: pieces the user or project supplies; the project's own published articles; well-known technical articles written by people before 2023. Read two of them for how they open, pace and name things; borrow the approach, never the wording.
 
 - **Show, then name**: the reader meets the thing before its term; jargon arrives as a label for something already seen.
 - **Plain words** even on hard topics: the audience includes non-native readers and newcomers. Strong verbs with a real subject ("The database writes the record", "You mark the order paid").
@@ -99,5 +99,3 @@ Run every check and keep the evidence (screenshots or notes):
 - **Reach**: desktop and phone screenshots, reduced motion, keyboard access to every interaction.
 
 The article is complete when every check passes and the final report lists the evidence and what was not checked (other browsers, real devices, reader comprehension).
-
-The sources behind these rules are in [the research record](../docs/research/2026-11-15-tech-article-sources.md).

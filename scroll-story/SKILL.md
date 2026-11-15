@@ -55,5 +55,3 @@ Verify in a real browser at desktop and phone sizes, and report the evidence:
 - no horizontal overflow on a phone, and no console errors.
 
 List what was not checked (other browsers, physical devices, frame rate under load, reader comprehension). The story is complete when every check above passes.
-
-The sources behind these rules are in [the research record](../docs/research/2026-11-15-tech-article-sources.md).

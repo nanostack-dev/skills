@@ -159,7 +159,7 @@ def calibrate(corpus_dir):
     rates = {k: round(v * 10000 / max(words, 1), 2) for k, v in totals.items()}
     dashes = sum(f.read_text(errors="ignore").count("—") for f in files)
     out = {
-        "corpus": "pre-2023 technical articles (see ../references/exemplars.md)",
+        "corpus": "technical articles written by people before 2023",
         "files": len(files),
         "words": words,
         "em_dash_per_10k": round(dashes * 10000 / max(words, 1), 2),
