@@ -115,6 +115,11 @@ authorization requirements.
    included) and test every caller's classifier against it; a class added to one
    caller goes into the others and the list the same day
    ([SSE reset](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-13-gate-sse-reset-not-transport.md)).
+   Launch every rerun with its own idempotency key (run, attempt, flow): a key shared
+   by several relaunches answers 409 to all but the first, and the failed launch's key
+   replays it. Whoever reruns or fixes a red gate deletes what its `TRANSPORT-LEAK`
+   lines name, in every attempt (a run's job list shows only the last attempt)
+   ([rerun key](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-16-gate-rerun-idempotency-conflict.md)).
    The callers are the local CLI script, the deploy gate and the scheduled monitors;
    a monitor reruns nothing, so read each failed scheduled run's node results for a
    transport error and uncompleted cleanups
