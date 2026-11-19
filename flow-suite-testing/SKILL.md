@@ -111,10 +111,16 @@ authorization requirements.
    Put the rerun and the leak report in every caller of the suite, the deploy gate
    first: a fix in one script leaves the gate that holds prod without it
    ([gate resets](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-05-gate-transport-resets.md)).
-   Keep one list of sample transport messages (a reset SSE stream of a child-run wait
-   included) and test every caller's classifier against it; a class added to one
-   caller goes into the others and the list the same day
-   ([SSE reset](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-13-gate-sse-reset-not-transport.md)).
+   Classify transport by its condition (reset, refused, TLS, DNS, TCP i/o timeout)
+   wherever it appears in the message, never by one caller's wording: the same reset
+   reaches a node, an SSE stream of a child-run wait and the client's own claim or
+   launch call, and each wording listed alone missed the next caller. Keep one list
+   of sample messages, one per caller, and test every caller's classifier against it;
+   a class added to one caller goes into the others and the list the same day. Print
+   the leak report before the verdict, so a run that fails on another flow still
+   names what its transport failures left behind
+   ([SSE reset](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-13-gate-sse-reset-not-transport.md),
+   [claim reset](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-19-gate-claim-reset-not-transport.md)).
    Launch every rerun with its own idempotency key (run, attempt, flow): a key shared
    by several relaunches answers 409 to all but the first, and the failed launch's key
    replays it. Whoever reruns or fixes a red gate deletes what its `TRANSPORT-LEAK`
