@@ -1,0 +1,182 @@
+{
+  "title": "Routine tag soak failed on a dev deploy 502 and printed an empty FAILED line",
+  "short": "Soak deploy overlap",
+  "service": "echopoint-investigation routine (run_suites.sh), dev echopoint deploy",
+  "date": "2026-11-20",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "An echopoint deploy (Deploy Router 44793938980) started five minutes into the routine's first tag soak. Dev Traefik answered 502 while a task stopped, and `Integration steps need the plan` failed on `update-ok`. run_suites.sh then read the flow's newest execution, which the gate had created two minutes later and passed, and printed `FAILED` with no message; its leak check would have read the same wrong run. This regresses the 2026-11-07 overlap row: `gate_wait` covers gates that start before a tag, not deploys that start during one. run_suites.sh now reads the execution it launched (`exec_of`) and reruns a 50x in an overlapped tag after its leak check.",
+  "impact": {
+    "text": "No customer impact. One soak flow failed; no resource leaked. Prod showed no 5xx during its own deploy.",
+    "numbers": [
+      {
+        "value": "3",
+        "label": "dev Traefik 502s in 11 s"
+      },
+      {
+        "value": "1",
+        "label": "soak flow failed"
+      },
+      {
+        "value": "0",
+        "label": "leaked resources"
+      }
+    ]
+  },
+  "trigger": "Deploy Router 44793938980 replaced dev echopoint tasks at 18:34 UTC during the soak.",
+  "detection": "run_suites.sh printed `GATE-OVERLAP` and an empty `FAILED` line at ~18:40 UTC; the routine read the tag log.",
+  "resolution": "Soak 2 passed 101/101 on the new build. run_suites.sh changed the same run.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-20T18:28:20Z",
+        "approx": true,
+        "kind": "note",
+        "label": "Soak 1 starts after gate_wait finds no run"
+      },
+      {
+        "t": "2026-11-20T18:33:48Z",
+        "kind": "change",
+        "label": "Deploy Router 44793938980 starts",
+        "link": "https://github.com/nanostack-dev/infra/actions/runs/44793938980"
+      },
+      {
+        "t": "2026-11-20T18:34:34Z",
+        "kind": "trigger",
+        "label": "update-ok gets 502 from dev Traefik",
+        "detail": "Traefik `DownstreamStatus 502`, `OriginStatus 502` at 18:34:27, :34, :38 on tasks 10.30.0.143/.144."
+      },
+      {
+        "t": "2026-11-20T18:36:27Z",
+        "kind": "note",
+        "label": "Gate runs the same flow; its run is the newest"
+      },
+      {
+        "t": "2026-11-20T18:40:00Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "run_suites.sh prints GATE-OVERLAP and an empty FAILED"
+      },
+      {
+        "t": "2026-11-20T18:45:00Z",
+        "approx": true,
+        "kind": "mitigate",
+        "label": "exec_of and DEPLOY-OVERLAP-RERUN staged"
+      },
+      {
+        "t": "2026-11-20T18:50:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Soak 2 passes 101/101 on the new build"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "A routine soak reported a failure that was not a product regression, with no error message",
+    "because": [
+      {
+        "text": "`update-ok` got 502 while Swarm replaced a dev echopoint task",
+        "evidence": "Traefik access log 18:34:34 `/flows/5a3b\u2026` 502; router `Deploy echopoint to dev` 18:33:51-18:34:45",
+        "because": [
+          {
+            "text": "The deploy started after gate_wait returned; no wait before a tag prevents a later deploy",
+            "because": [
+              {
+                "id": "R1",
+                "root": true,
+                "text": "run_suites.sh reran only transport and lease failures, so a deploy-window 5xx failed the soak"
+              }
+            ]
+          },
+          {
+            "text": "Dev Traefik still routed to a stopping task during a start-first rollout; prod showed none",
+            "open": true
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "The FAILED line was empty and the leak check pointed at the wrong run",
+        "evidence": "`flows execution list` items[0] = 01a1fa3e\u2026 completed (gate, 18:36:27); failed run 01a1fa3c\u2026",
+        "because": [
+          {
+            "text": "`fail_err` and `leaks` took `execution list` items[0]; the gate ran the flow 2 min later in the same org",
+            "evidence": "run_suites.sh before 2026-11-20T18:45Z",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "run_suites.sh identified a failed run as the flow's newest execution, which breaks whenever the gate runs the same flow"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "lessons": {
+    "well": [
+      "GATE-OVERLAP flagged the overlap, so the cause was found from one log line."
+    ],
+    "wrong": [
+      "The empty FAILED line looked like the 2026-11-11 launch-timeout case and pointed the wrong way."
+    ],
+    "lucky": [
+      "The failed run's cleanups completed; a leak there would have been checked against the gate's green run and missed."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "`exec_of`: fail_err and leaks read the execution the script launched",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-20",
+      "status": "done",
+      "fixes": [
+        "R2"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`DEPLOY-OVERLAP-RERUN`: rerun once a 502/503/504 in a tag a deploy overlapped, after the leak check",
+      "type": "mitigate",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-20",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "Find why dev Traefik routes to a stopping echopoint task in start-first rollouts (prod clean)",
+      "type": "detect",
+      "owner": "infra maintainers",
+      "due": "2026-12-04",
+      "status": "open",
+      "fixes": [
+        "R1"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigation and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Soak false failure from a deploy overlap; run_suites.sh now reads its own execution and reruns deploy-window 5xx.",
+    "external": "None."
+  },
+  "links": [
+    {
+      "label": "Previous overlap postmortem",
+      "url": "2026-11-07-suite-overlapped-deploy-gate.md"
+    }
+  ]
+}

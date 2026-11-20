@@ -1,0 +1,171 @@
+{
+  "title": "Gate flow `Flow save history and restore` failed when the run id completed a not_contains token",
+  "short": "Run id completed a token",
+  "service": "echopoint prod CI org flow suite (echopoint gate tag)",
+  "date": "2026-11-20",
+  "severity": "SEV4",
+  "status": "in review",
+  "authors": [
+    "Nanostack routine (echopoint-investigation)"
+  ],
+  "summary": "The routine's third tag soak failed `Flow save history and restore` (af928132): node `get-restored` asserted the body does not contain `hist-c`, and the flow's own name `ep-hist-{{$runId}}` rendered as `ep-hist-ce16\u2026`. Any run id starting with `c` failed it: one run in sixteen, in the echopoint gate tag since 2026-11-20T06:08Z. The routine replaced the body checks with JSONPath checks on the node display name, renamed the flow prefix, and added `audit_runid_collision.py` to every suite run; it found no other flow in the class.",
+  "impact": {
+    "text": "No customer impact. One soak failed. Each gate run had a 1 in 16 chance to fail and hold a prod deploy.",
+    "numbers": [
+      {
+        "value": "1/16",
+        "label": "chance per run (two nodes)"
+      },
+      {
+        "value": "~13 h",
+        "label": "in the gate tag before the fix"
+      },
+      {
+        "value": "0",
+        "label": "gate failures from it"
+      }
+    ]
+  },
+  "trigger": "Run id `ce16d4bb\u2026` made the flow name contain `hist-c`.",
+  "detection": "The routine's third soak at 18:52 UTC printed `FAILED \u2026 body not_contains expected=hist-c` and the routine read the full body.",
+  "resolution": "Flow updated at 19:06 UTC (JSONPath on `display_name`, prefix `ep-history-`), green 3x; audit wired into run_suites.sh.",
+  "timeline": {
+    "events": [
+      {
+        "t": "2026-11-20T06:10:00Z",
+        "approx": true,
+        "kind": "change",
+        "label": "Routine adds the flow to the echopoint tag",
+        "detail": "Generator `gen_flow_history.py`, 3 serial greens and 2 tag soaks."
+      },
+      {
+        "t": "2026-11-20T18:52:45Z",
+        "kind": "trigger",
+        "label": "Run id ce16\u2026 makes the name contain hist-c"
+      },
+      {
+        "t": "2026-11-20T18:53:30Z",
+        "approx": true,
+        "kind": "detect",
+        "label": "Soak 3 prints FAILED on get-restored"
+      },
+      {
+        "t": "2026-11-20T19:06:50Z",
+        "kind": "mitigate",
+        "label": "Flow updated: JSONPath checks, ep-history- prefix"
+      },
+      {
+        "t": "2026-11-20T19:08:00Z",
+        "approx": true,
+        "kind": "resolve",
+        "label": "Green 3x; audit finds no other flow"
+      }
+    ]
+  },
+  "whys": {
+    "problem": "A gate-tag flow failed with no product change",
+    "because": [
+      {
+        "text": "`get-restored` asserted the body does not contain `hist-c`, and the body held `ep-hist-ce16\u2026`",
+        "evidence": "Node error: `body not_contains expected=hist-c actual={\u2026 \"name\":\"ep-hist-ce16d4bb83f1\" \u2026}`",
+        "because": [
+          {
+            "text": "The flow name carries `{{$runId}}` (hex), and the token's tail `c` is a hex digit",
+            "evidence": "`gen_flow_history.py` line 71 `ep-hist-{{$runId}}`",
+            "because": [
+              {
+                "text": "Absence was asserted on the whole body instead of on the field that holds the marker",
+                "because": [
+                  {
+                    "id": "R1",
+                    "root": true,
+                    "text": "No rule or check stops a body `not_contains` token that a per-run id in the same flow can complete"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "lens": "impact",
+        "text": "Three serial greens and two soaks did not show it: 15 of 16 run ids pass",
+        "because": [
+          {
+            "text": "The author's checks for a new flow were runs only: 3 serial greens and 2 tag soaks, no static review of assertions",
+            "because": [
+              {
+                "id": "R2",
+                "root": true,
+                "text": "Probabilistic false failures need a static check; repeated runs only sample them"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "lessons": {
+    "well": [
+      "The runner printed the actual body, so the cause was clear in one read."
+    ],
+    "wrong": [
+      "A check written to prove the restored state was weaker than the JSONPath check beside it."
+    ],
+    "lucky": [
+      "It failed in a soak, not in a gate holding a prod deploy."
+    ]
+  },
+  "actions": [
+    {
+      "id": "A1",
+      "what": "Assert on `display_name` by JSONPath; prefix `ep-history-` (flow af928132, generator)",
+      "type": "prevent",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-20",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    },
+    {
+      "id": "A2",
+      "what": "`audit_runid_collision.py` runs on every tagged flow in run_suites.sh and prints RUNID-COLLISION",
+      "type": "detect",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-20",
+      "status": "done",
+      "fixes": [
+        "R2",
+        "R1"
+      ]
+    },
+    {
+      "id": "A3",
+      "what": "flow-suite-testing skill: assert absence on the field, not a body token",
+      "type": "process",
+      "owner": "Nanostack routine (echopoint-investigation)",
+      "due": "2026-11-20",
+      "status": "done",
+      "fixes": [
+        "R1"
+      ]
+    }
+  ],
+  "responders": [
+    {
+      "role": "Investigation and fix",
+      "name": "Nanostack routine (echopoint-investigation)"
+    }
+  ],
+  "messaging": {
+    "internal": "Flow save history and restore could fail 1 run in 16 (run id completed a not_contains token); fixed and audited.",
+    "external": "None."
+  },
+  "links": [
+    {
+      "label": "skills PR",
+      "url": "https://github.com/nanostack-dev/skills/pulls"
+    }
+  ]
+}

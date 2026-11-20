@@ -83,6 +83,11 @@ authorization requirements.
    count the quota's other consumers in the window (scheduled monitors and probes
    included; one whose own cadence exceeds the quota keeps it full), and fix the
    contention.
+   Read a failed run by the execution id the runner printed for it, not the flow's
+   newest execution: a gate or monitor that runs the same flow minutes later becomes
+   the newest one and hides the failure and its leaks. A tag run that a deploy
+   overlaps can fail on the deploy's 502s: rerun those once after the leak check
+   ([deploy overlap](../docs/postmortems/2026-11-20-soak-deploy-overlap-502.md)).
    A runner on a host that can sleep or drop its network (a laptop, a runner embedded
    in a CLI) produces host causes, not product ones: a lease-expired or job-token
    rejection, and a transport failure before any response (connection reset or
@@ -199,6 +204,10 @@ alone does not establish concurrency.
   depend on all relevant writes; isolate the scope or assert a verified delta.
   Before adding a write to an existing flow, list that flow's counts in the
   write's scope and update each one in the same edit.
+- Assert absence on the field (a JSONPath `equals` on the value you expect), not with a
+  body `not_contains` on a short token: names that carry a per-run id are in the body,
+  and a hex run id can complete the token (`ep-hist-ce16…` contains `hist-c`, so the
+  check failed one run in sixteen) ([run id completed a token](../docs/postmortems/2026-11-20-runid-completed-not-contains-token.md)).
 - Assert each new list field's empty state on the wire: an isolated tenant with
   no data returns an empty array. Generated clients decode null and an empty array
   alike, so only the raw response tells them apart; confirm the engine's emptiness
