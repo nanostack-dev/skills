@@ -244,6 +244,12 @@ standing accounts and environment-dependent settings belong in the project's
 configuration scopes. Discover precedence between shared, flow, environment and
 launch inputs; verify how unresolved values fail before sending requests.
 
+A value the server builds from its own configuration (an advertised URL, a
+public host, a sender address) is expected through a variable that holds that
+same setting, one per setting. A value derived from another variable passes only
+while both settings agree, and a config change then turns a gate red
+([postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-20-gate-flow-pinned-mcp-host.md)).
+
 A generator produces data that varies per run. Use it for disposable names,
 addresses and correlation identifiers. Generate once and pass the resulting value
 when several nodes need the same identity. Re-evaluating a generator in a child
