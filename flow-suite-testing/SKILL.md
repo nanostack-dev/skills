@@ -221,6 +221,12 @@ resources. Withdraw public projections or independently surviving artifacts
 before deleting their owner when the application's lifecycle requires that order.
 Accept already-removed states only where the API contract makes them safe.
 
+A check that expects a refusal cannot capture an id for a cleanup: an output whose
+path is absent fails the step even when its assertions pass. Prove a refusal
+stored nothing on a resource the run already owns (refuse an update, then read
+the resource back), or give a refused create a run-unique name that a later
+check can search for.
+
 Verify removal through supported read-back or listing APIs and report cleanup
 failure even when assertions passed. Order each removal check before the delete
 of any credential it authenticates with (the run's organization or its key):
