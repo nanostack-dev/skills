@@ -154,7 +154,11 @@ authorization requirements.
    ([gate tag flow cap](../docs/postmortems/2026-11-04-gate-tag-flow-cap.md)).
 8. **Connect the gate.** Register the flow through the project's supported suite
    selection and synchronize authorized copies where needed. Verify that current
-   CI actually selects the changed definitions.
+   CI actually selects the changed definitions. The selection holds tests only: a
+   reusable subflow (Echopoint function) runs through its callers and stays
+   untagged, and every caller skips functions (`--ignore-modules`), because run
+   alone it fails on its required inputs
+   ([gate ran functions](https://github.com/nanostack-dev/ci-workflows/blob/main/docs/postmortems/2026-11-21-gate-ran-function-flows.md)).
 
 Completion records the tested source, engine version, resolved scope, selection,
 expected and actual outcomes, repeat runs, cleanup and remaining boundaries.
