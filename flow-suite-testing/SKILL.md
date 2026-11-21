@@ -375,6 +375,19 @@ organization comes from the same organization as that node's credential. Prove
 the migration on a build that enforces the new rule; a run against the lenient
 build passes every miss ([2026-10-19 postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-10-19-workspace-header-suite-migration.md)).
 
+When a contract renames a value the suite sends or asserts (an enum value, a
+field name), find every site with a field-aware query over the exported flows:
+request bodies, query parameters, and each assertion's extractor path together
+with its expected value. An assertion stores the field and the value apart
+(`path: $.role`, `value: standalone`), so a text search for `"role":"standalone"`
+misses it. Ask for the old value to stay accepted until the suite sends the new
+one and runs green against the build; a hard rename leaves no flow state that
+passes before and after the merge, so the edit goes to the gate untested. After a
+scripted edit of many flows, re-export them and lint what the engine stores: a
+header name that is not an HTTP token is refused before the request leaves, and
+an engine may report it as a connection failure
+([role rename postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-21-gate-flows-pinned-role-rename.md)).
+
 Read the earliest causal failure and its expected/actual evidence. A long skipped
 tail may expose false dependencies, but setup failure or the engine's cancellation
 policy can produce the same symptom. Fix the demonstrated graph or product issue.
