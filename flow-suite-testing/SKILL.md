@@ -392,6 +392,16 @@ header name that is not an HTTP token is refused before the request leaves, and
 an engine may report it as a connection failure
 ([role rename postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-21-gate-flows-pinned-role-rename.md)).
 
+When a contract adds a precondition (a permission the caller must hold, a ceiling
+on what a key may grant, a newly required state), no value changes, so a value
+search finds nothing. Query the exported flows by route and credential: every node
+that calls the route with the credential the precondition checks, then confirm
+each credential meets the new requirement. An edit made before the merge asserts
+the old or the new outcome (`^(403|409)$`) until the target runs the merged build,
+then tightens: in a merge train each gate deploys one commit, so every gate of a
+commit queued ahead of the change runs the edited flow against the old code
+([security merge train postmortem](https://github.com/nanostack-dev/infra/blob/main/docs/postmortems/2026-11-23-gate-flows-missed-security-preconditions.md)).
+
 Read the earliest causal failure and its expected/actual evidence. A long skipped
 tail may expose false dependencies, but setup failure or the engine's cancellation
 policy can produce the same symptom. Fix the demonstrated graph or product issue.
