@@ -135,6 +135,12 @@ authorization requirements.
    a monitor reruns nothing, so read each failed scheduled run's node results for a
    transport error and uncompleted cleanups
    ([monitor transport failure](https://github.com/nanostack-dev/echopoint/blob/main/docs/postmortems/2026-11-08-monitor-transport-failure.md)).
+   An API that reports its own outbound fetch failure inside a 200 body (`last_error`, an
+   `error` field) hides a reset from every classifier: assert that field before any count,
+   with a check whose failure message prints the value (a body `not_contains` prints the
+   body; a JSONPath on a null value is an extractor error, not empty). Try the check on an
+   untagged copy first: an edit to a gate flow is live for the next gate
+   ([source fetch reset](https://github.com/nanostack-dev/echopoint/blob/main/docs/postmortems/2026-11-24-openapi-source-fetch-reset-red-gate.md)).
    A flow that fails on some deploys of unchanged code and passes on others carries
    state drawn per process: a restart re-rolls it, so each replica can run a different
    order. Treat a pass after such failures as a coin flip and read the server's
